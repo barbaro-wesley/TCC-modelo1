@@ -1,0 +1,20 @@
+# Diesel B S-10 — atualizacao semanal dos dados e do modelo.
+# Instale com:  crontab -e   (ou deixe deploy/instalar_vps.sh fazer isso)
+# Troque /srv/diesel-s10 pelo caminho real do repo na VPS.
+
+CRON_TZ=America/Sao_Paulo
+PATH=/usr/local/bin:/usr/bin:/bin
+
+# A ANP publica a sintese semanal no meio da semana, mas a data varia e as vezes
+# atrasa. Rodar duas vezes por dia e barato: sem semana nova o job sai em
+# segundos, e a primeira execucao que encontrar dado novo faz o retreino.
+30 9  * * * /srv/diesel-s10/deploy/run_semanal.sh --pular-lstm
+30 15 * * * /srv/diesel-s10/deploy/run_semanal.sh --pular-lstm
+
+# Alternativa mais economica, se voce preferir uma janela fixa: so as quartas e
+# quintas, de manha e de tarde.
+# 30 9,15 * * 3,4 /srv/diesel-s10/deploy/run_semanal.sh --pular-lstm
+
+# Retreino completo (com LSTM) uma vez por mes, para o relatorio do TCC ficar
+# com o benchmark inteiro. Precisa do torch instalado.
+# 0 4 1 * * /srv/diesel-s10/deploy/run_semanal.sh --forcar

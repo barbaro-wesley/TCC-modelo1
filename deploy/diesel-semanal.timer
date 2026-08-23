@@ -1,0 +1,14 @@
+[Unit]
+Description=Dispara a atualizacao semanal do Diesel S-10
+
+[Timer]
+# Duas vezes por dia: sem semana nova da ANP o job sai em segundos.
+OnCalendar=*-*-* 09:30:00
+OnCalendar=*-*-* 15:30:00
+# Se a VPS estiver desligada ou reiniciando no horario, roda ao voltar.
+Persistent=true
+RandomizedDelaySec=300
+Unit=diesel-semanal.service
+
+[Install]
+WantedBy=timers.target

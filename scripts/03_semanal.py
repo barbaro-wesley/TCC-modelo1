@@ -18,8 +18,12 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from benchmarks.classical import arima_forecast, arimax_forecast, ma_predict, naive_predict  # noqa: E402
 from benchmarks.gbm import fit_lgbm, fit_xgb, predict_lgbm  # noqa: E402
-from benchmarks.lstm import fit_lstm, predict_lstm  # noqa: E402
+try:  # torch e opcional: o LSTM roda em subprocesso e pode faltar na VPS
+    from benchmarks.lstm import fit_lstm, predict_lstm  # noqa: E402
+except Exception:  # pragma: no cover
+    fit_lstm = predict_lstm = None  # type: ignore[assignment]
 from data.build import leak_check  # noqa: E402
+from data.panel import ARIMAX_COLS, FEATURE_COLS, load_panel, scale_frozen  # noqa: E402
 from eval.drift import page_hinkley, psi, rolling_rmse  # noqa: E402
 from eval.importance import permutation_importance  # noqa: E402
 from eval.intervals import conformal_p10_p90, direction_probs  # noqa: E402
@@ -33,17 +37,10 @@ RES = ROOT / "results"
 FIG = ROOT / "reports" / "figures"
 REP = ROOT / "reports"
 
-FEATURE_COLS = [
-    "revenda_l1", "revenda_l2", "revenda_l4", "revenda_l8", "revenda_l12",
-    "revenda_ma4", "revenda_ma8", "revenda_ma12",
-    "vol4", "vol12",
-    "brent_l1", "brent_l4", "brent_brl_l1", "brent_brl_l4",
-    "usdbrl_l1", "usdbrl_l4",
-    "ulsd_l1", "ulsd_l4",
-    "petrobras_reajuste_l1", "paridade_z_l1",
-]
+# FEATURE_COLS, ARIMAX_COLS e load_panel vivem em src/data/panel.py: o job
+# semanal monta o mesmo painel para gerar a previsao publicada.
 
-ARIMAX_COLS = ["brent_l1", "usdbrl_l1"]
+SKIP_LSTM = os.environ.get("SKIP_LSTM", "").strip().lower() in {"1", "true", "sim"}
 
 
 def md_table(df: pd.DataFrame) -> str:
@@ -61,35 +58,11 @@ def md_table(df: pd.DataFrame) -> str:
     return "\n".join(lines)
 
 
-def load_panel(horizon: int) -> pd.DataFrame:
-    df = pd.read_csv(PROC / "semanal_s10_features.csv", parse_dates=["data"])
-    df = df.sort_values("data").reset_index(drop=True)
-    df["y"] = df["revenda"].shift(-horizon)
-    df["y_prev"] = df["revenda"]
-    future_date = df["data"].shift(-horizon)
-    gap_mask = (future_date >= pd.Timestamp("2020-08-18")) & (future_date <= pd.Timestamp("2020-10-17"))
-    df = df.loc[~gap_mask].copy()
-    feat_cols = [c for c in FEATURE_COLS if c in df.columns and float(df[c].notna().mean()) > 0.8]
-    df[feat_cols] = df[feat_cols].ffill()
-    keep = feat_cols + ["y", "y_prev", "revenda", "data"]
-    out = df[keep].dropna(subset=feat_cols + ["y"]).reset_index(drop=True)
-    out.attrs["feat_cols"] = feat_cols
-    return out
-
-
 def minmax_train(Xtr, Xte):
     lo = np.nanmin(Xtr, axis=0)
     hi = np.nanmax(Xtr, axis=0)
     span = np.where(hi - lo == 0, 1.0, hi - lo)
     return (Xtr - lo) / span, (Xte - lo) / span, lo, span
-
-
-def scale_frozen(X, n_min):
-    lo = np.nanmin(X[:n_min], axis=0)
-    hi = np.nanmax(X[:n_min], axis=0)
-    span = np.where(hi - lo == 0, 1.0, hi - lo)
-    Xs = np.clip((X - lo) / span, -0.25, 1.25)
-    return Xs, lo, span
 
 
 def run_vsepl(X, y, n_min, horizon=1):
@@ -247,18 +220,21 @@ def main():
         preds["LightGBM"], lgb_model = run_gbm("lgbm", X, y, n_min, horizon, 12)
         print("  XGBoost...")
         preds["XGBoost"], xgb_model = run_gbm("xgb", X, y, n_min, horizon, 12)
-        print("  LSTM (subprocess)...")
-        tmp = RES / f"_tmp_lstm_h{horizon}.npz"
-        np.savez(tmp, X=X, y=y)
-        yhat_path = tmp.with_name(tmp.stem + "_yhat.npy")
-        r = subprocess.run(
-            [sys.executable, str(ROOT / "scripts" / "_lstm_wf.py"), str(tmp), str(n_min), str(horizon), "26", "8"],
-            cwd=str(ROOT),
-        )
-        if r.returncode == 0 and yhat_path.exists():
-            preds["LSTM"] = np.load(yhat_path)
+        if SKIP_LSTM:
+            print("  LSTM pulado (SKIP_LSTM=1).")
         else:
-            print(f"  LSTM indisponivel (exit={r.returncode}); segue sem esse benchmark.")
+            print("  LSTM (subprocess)...")
+            tmp = RES / f"_tmp_lstm_h{horizon}.npz"
+            np.savez(tmp, X=X, y=y)
+            yhat_path = tmp.with_name(tmp.stem + "_yhat.npy")
+            r = subprocess.run(
+                [sys.executable, str(ROOT / "scripts" / "_lstm_wf.py"), str(tmp), str(n_min), str(horizon), "26", "8"],
+                cwd=str(ROOT),
+            )
+            if r.returncode == 0 and yhat_path.exists():
+                preds["LSTM"] = np.load(yhat_path)
+            else:
+                print(f"  LSTM indisponivel (exit={r.returncode}); segue sem esse benchmark.")
 
         naive_err = None
         vs_resid = vs_lo = vs_hi = vs_mask = None
@@ -299,6 +275,14 @@ def main():
                 fig.tight_layout()
                 fig.savefig(FIG / f"drift_rmse_h{horizon}.png", dpi=140)
                 plt.close(fig)
+
+        # Previsoes walk-forward de cada modelo, ponto a ponto. O job semanal
+        # le esse arquivo para tirar os residuos do modelo vencedor (P10/P90 e
+        # probabilidades de direcao) sem precisar refazer o walk-forward.
+        wf = pd.DataFrame({"data": dates, "y": y, "y_prev": y_prev})
+        for name, yhat in preds.items():
+            wf[name] = yhat
+        wf.to_csv(RES / f"walkforward_preds_h{horizon}.csv", index=False)
 
         # permutation importance on LightGBM last model
         if lgb_model is not None:

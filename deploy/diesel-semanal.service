@@ -1,0 +1,21 @@
+[Unit]
+Description=Diesel S-10: baixa dados da ANP e retreina o modelo
+Documentation=file:///srv/diesel-s10/deploy/README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=diesel
+WorkingDirectory=/srv/diesel-s10
+Environment=TZ=America/Sao_Paulo
+Environment=OMP_NUM_THREADS=2
+ExecStart=/srv/diesel-s10/deploy/run_semanal.sh --pular-lstm
+TimeoutStartSec=3600
+
+# O job so escreve dentro do repo.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=read-only
+ReadWritePaths=/srv/diesel-s10
