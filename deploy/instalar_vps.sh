@@ -38,11 +38,24 @@ if [ -z "$BASE_PY" ] || [ ! -x "$BASE_PY" ]; then
 fi
 echo "==> interpretador base: $BASE_PY ($("$BASE_PY" --version 2>&1))"
 
-if [ ! -x "$ROOT/.venv/bin/python" ]; then
-  echo "==> criando .venv"
-  "$BASE_PY" -m venv "$ROOT/.venv"
-else
+# Nao basta o binario existir: quando falta o python3.X-venv, o `python -m venv`
+# monta a arvore de diretorios e so depois quebra no ensurepip, deixando uma
+# venv sem pip. Testar o pip e o unico jeito de distinguir as duas situacoes.
+if [ -x "$ROOT/.venv/bin/python" ] && "$ROOT/.venv/bin/python" -m pip --version >/dev/null 2>&1; then
   echo "==> .venv ja existe"
+else
+  if [ -d "$ROOT/.venv" ]; then
+    echo "==> .venv existente esta incompleta (sem pip); recriando"
+    rm -rf "$ROOT/.venv"
+  fi
+  echo "==> criando .venv"
+  if ! "$BASE_PY" -m venv "$ROOT/.venv"; then
+    versao="$("$BASE_PY" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")' 2>/dev/null || echo 3)"
+    echo "" >&2
+    echo "Falha ao criar a venv. No Debian/Ubuntu falta o pacote:" >&2
+    echo "    sudo apt install python${versao}-venv" >&2
+    exit 1
+  fi
 fi
 PY="$ROOT/.venv/bin/python"
 
