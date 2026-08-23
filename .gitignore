@@ -11,3 +11,5 @@ reports/figures/
 *.egg-info/
 .ipynb_checkpoints/
 logs/
+api/diesel-api
+api/diesel-api.exe

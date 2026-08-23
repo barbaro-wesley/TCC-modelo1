@@ -1,0 +1,33 @@
+[Unit]
+Description=API de leitura das previsoes do Diesel S-10
+Documentation=file:///opt/TCC-modelo1/deploy/README.md
+After=network.target
+
+[Service]
+Type=simple
+User=azureuser
+WorkingDirectory=/opt/TCC-modelo1/api
+ExecStart=/opt/TCC-modelo1/api/diesel-api
+
+Environment=DIESEL_DATA_DIR=/opt/TCC-modelo1/results/api
+# Escuta so no loopback: quem fala com a internet e o nginx.
+Environment=DIESEL_ADDR=127.0.0.1:8080
+# Troque pela origem real do front (varias, separadas por virgula).
+Environment=DIESEL_CORS_ORIGINS=https://SEUFRONT.vercel.app
+Environment=DIESEL_MAX_ATRASO=10
+
+Restart=on-failure
+RestartSec=5s
+
+# A API so le arquivos; nada aqui precisa de escrita.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6
+RestrictNamespaces=true
+
+[Install]
+WantedBy=multi-user.target

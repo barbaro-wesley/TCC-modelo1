@@ -60,6 +60,8 @@ Instalação do cron na VPS: veja [`deploy/README.md`](deploy/README.md).
 
 Estado interno em `results/pipeline_state.json`; logs em `logs/`.
 
+Uma API em Go (`api/`, só stdlib) serve esses três arquivos em `/api/previsao`, `/api/historico`, `/api/status` e `/health`, com cache por `mtime` e CORS configurável. Deploy com systemd + nginx + TLS em [`deploy/README.md`](deploy/README.md).
+
 ## Como rodar
 
 No macOS, LightGBM/XGBoost precisam de OpenMP: `brew install libomp`.
