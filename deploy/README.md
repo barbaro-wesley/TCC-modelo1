@@ -189,50 +189,45 @@ ssh azureuser@<ip> "chmod +x /opt/TCC-modelo1/api/diesel-api && sudo systemctl r
 
 O binario sai estatico (~8,8 MB), sem dependencia de libc — roda em qualquer Ubuntu.
 
-### 2. systemd
+### 2. Tudo o resto num comando
 
 ```bash
-sudo cp deploy/diesel-api.service /etc/systemd/system/
-sudo nano /etc/systemd/system/diesel-api.service   # ajuste DIESEL_CORS_ORIGINS
-sudo systemctl daemon-reload
-sudo systemctl enable --now diesel-api
-systemctl status diesel-api
-curl -s localhost:8080/health
+sudo ./deploy/instalar_api.sh atlas.creditfy.com.br https://meufront.vercel.app
 ```
 
-`DIESEL_CORS_ORIGINS` é a origem exata do front (`https://seuapp.vercel.app`), com
-esquema e sem barra final. Várias, separadas por vírgula. `*` libera qualquer origem —
-aceitável aqui, já que são dados públicos e só de leitura, mas prefira a lista.
+O segundo argumento e a origem do front para o CORS (varias separadas por virgula);
+sem ele fica `*`. O script:
+
+1. compila o binario se ainda nao existir (como o dono do repo, nao como root);
+2. escreve o unit do systemd com os caminhos deste repo, o usuario correto e o CORS;
+3. escreve a config do nginx **reescrevendo o `server_name`** com o dominio passado —
+   nao ha placeholder para esquecer de substituir;
+4. desabilita o bloco `default` **apenas se** ele estiver com o seu dominio no
+   `server_name` (acontece quando o certbot roda antes do bloco da API existir e
+   acaba escrevendo no bloco errado, que serve `/var/www/html` e responde 404);
+5. roda `nginx -t` antes de qualquer reload — config invalida nunca vai ao ar;
+6. chama o certbot: reinstala o certificado se ja existir, emite se nao;
+7. confere `/health` pela porta 8080 e pelo nginx, e falha com o log do servico se algo nao responder.
+
+E idempotente: rode de novo para trocar dominio, trocar a origem do front ou
+recarregar o binario (apague `api/diesel-api` antes para forcar recompilacao).
+Backup das configs do nginx vai para `/root/backup-nginx-<data>`.
 
 ### 3. DNS e firewall da Azure
 
-Registro **A** para `api.seudominio.com.br` apontando para o IP público da VM.
-E abra as portas no **Network Security Group** — o firewall da Azure é separado do
-`ufw`, e esquecer disso é o motivo nº 1 de "o nginx subiu mas não responde":
+Registro **A** para o dominio apontando para o IP publico da VM. E abra as portas
+no **Network Security Group** — o firewall da Azure e separado do `ufw`, e esquecer
+disso e o motivo n. 1 de "o nginx subiu mas nao responde":
 
 ```bash
-az network nsg rule create -g <grupo> --nsg-name <nsg> -n allow-http \
-  --priority 1001 --destination-port-ranges 80 443 --access Allow --protocol Tcp
+az network nsg rule create -g <grupo> --nsg-name <nsg> -n allow-http   --priority 1001 --destination-port-ranges 80 443 --access Allow --protocol Tcp
 ```
 
-Confirme que o DNS propagou antes de emitir o certificado: `dig +short api.seudominio.com.br`.
+Confirme que o DNS propagou antes de rodar o instalador: `dig +short <dominio>`.
+O certbot valida por HTTP e falha se o nome ainda nao resolve.
 
-### 4. nginx e TLS
+### 4. Conferir
 
-```bash
-sudo apt install -y nginx certbot python3-certbot-nginx
-sudo cp deploy/nginx-api.conf /etc/nginx/sites-available/diesel-api
-sudo sed -i 's/api.SEUDOMINIO.com.br/api.seudominio.com.br/g' /etc/nginx/sites-available/diesel-api
-sudo ln -s /etc/nginx/sites-available/diesel-api /etc/nginx/sites-enabled/
-sudo nginx -t && sudo systemctl reload nginx
-sudo certbot --nginx -d api.seudominio.com.br
-```
-
-O certbot escreve o bloco HTTPS e o redirect 80→443 sozinho, com os caminhos de
-certificado corretos, e instala a renovação automática. Por isso o arquivo versionado
-só tem a porta 80.
-
-### 5. Conferir
 
 ```bash
 curl -s https://api.seudominio.com.br/health
