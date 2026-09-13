@@ -2,7 +2,7 @@
 
 O job baixa os dados novos da ANP, refaz as features, roda o walk-forward de novo e
 publica a previsão do modelo vencedor em JSON. Tudo fica em arquivo no disco — a API
-em Go só precisa ler `results/api/`.
+em Python lê `results/api/` e mantém usuários, assinaturas e consumo no PostgreSQL.
 
 ## Instalação
 
@@ -93,7 +93,7 @@ cat data/raw/download_report.json        # o que cada fonte devolveu
 Logs com mais de 60 dias são apagados sozinhos. Se um job morreu no meio e deixou a trava,
 ela é ignorada automaticamente depois de 6 horas — ou apague `results/.pipeline.lock`.
 
-## Contrato para a API em Go
+## Contrato interno de artefatos para a API Python
 
 `results/api/` é reescrito por completo a cada execução (escrita atômica via `.tmp` +
 rename, então a API nunca lê um arquivo pela metade).
@@ -119,7 +119,7 @@ rename, então a API nunca lê um arquivo pela metade).
 ```
 
 `p10`, `p90` e as probabilidades são `null` enquanto não houver pelo menos 20 resíduos
-walk-forward do modelo vencedor. Todo `float` pode vir `null` — use ponteiros no Go.
+walk-forward do modelo vencedor. Valores numéricos podem vir `null`; a API valida os campos necessários antes de servir a previsão.
 
 ### `historico.json`
 
@@ -134,121 +134,17 @@ acumulada.
 `ultima_execucao_ok` e `ultima_semana_processada` para um health check: se
 `ultima_semana_processada` ficar mais de ~10 dias atrás do dia de hoje, algo travou.
 
-### Structs
+## API Python autenticada
 
-```go
-type Previsao struct {
-    Modelo                     string             `json:"modelo"`
-    RMSEWalkforward            float64            `json:"rmse_walkforward"`
-    UltimaSemanaObservada      string             `json:"ultima_semana_observada"`
-    PrecoObservadoUltimaSemana float64            `json:"preco_observado_ultima_semana"`
-    SemanaPrevista             string             `json:"semana_prevista"`
-    PrevisaoPontual            float64            `json:"previsao_pontual"`
-    P10                        *float64           `json:"p10"`
-    P90                        *float64           `json:"p90"`
-    Probabilidades             map[string]*float64 `json:"probabilidades"`
-    PrevisoesPorModelo         map[string]*float64 `json:"previsoes_por_modelo"`
-}
+O backend da plataforma foi consolidado em Python/FastAPI. Instalação local, Neon,
+Redis, migrações, autenticação, planos, consumo, paginação e testes estão em
+[`api/README.md`](../api/README.md).
 
-type Status struct {
-    Status                  string  `json:"status"`
-    UltimaExecucaoOK        *string `json:"ultima_execucao_ok"`
-    UltimaSemanaProcessada  *string `json:"ultima_semana_processada"`
-    ModeloProducao          *string `json:"modelo_producao"`
-    Erro                    *string `json:"erro"`
-}
-```
+Na VPS, configure `.env` antes de executar `sudo ./deploy/instalar_api.sh <dominio>`.
+O instalador cria `.venv-api`, instala as dependências do backend, aplica Alembic e
+configura systemd/nginx/TLS. Não há mais compilação Go. As URLs públicas agora são
+`/api/v1/forecast`, `/api/v1/history` e `/api/v1/status`, todas autenticadas.
+`/health/live` verifica o processo; `/health/ready` verifica PostgreSQL e Redis.
 
-Os arquivos mudam no máximo uma vez por semana: sirva com cache e recarregue por
-`mtime` em vez de reler a cada requisição.
-
-## Subindo a API em Go
-
-O serviço está em [`api/`](../api). Ele não tem dependência externa — só a stdlib —
-e não interpreta o payload: entrega os bytes do JSON que o pipeline escreveu. Mudar
-um campo no lado do Python não exige recompilar nada aqui.
-
-### 1. Compilar
-
-Na própria VM:
-
-```bash
-sudo apt install -y golang-go
-cd /opt/TCC-modelo1/api
-go build -o diesel-api .
-```
-
-Ou compile no Windows e mande só o binário (evita instalar Go na VM):
-
-```powershell
-cd api                                    # o go.mod fica aqui, nao na raiz
-$env:GOOS="linux"; $env:GOARCH="amd64"; go build -o diesel-api .
-scp diesel-api azureuser@<ip>:/opt/TCC-modelo1/api/
-ssh azureuser@<ip> "chmod +x /opt/TCC-modelo1/api/diesel-api && sudo systemctl restart diesel-api"
-```
-
-O binario sai estatico (~8,8 MB), sem dependencia de libc — roda em qualquer Ubuntu.
-
-### 2. Tudo o resto num comando
-
-```bash
-sudo ./deploy/instalar_api.sh atlas.creditfy.com.br https://meufront.vercel.app
-```
-
-O segundo argumento e a origem do front para o CORS (varias separadas por virgula);
-sem ele fica `*`. O script:
-
-1. compila o binario se ainda nao existir (como o dono do repo, nao como root);
-2. escreve o unit do systemd com os caminhos deste repo, o usuario correto e o CORS;
-3. escreve a config do nginx **reescrevendo o `server_name`** com o dominio passado —
-   nao ha placeholder para esquecer de substituir;
-4. desabilita o bloco `default` **apenas se** ele estiver com o seu dominio no
-   `server_name` (acontece quando o certbot roda antes do bloco da API existir e
-   acaba escrevendo no bloco errado, que serve `/var/www/html` e responde 404);
-5. roda `nginx -t` antes de qualquer reload — config invalida nunca vai ao ar;
-6. chama o certbot: reinstala o certificado se ja existir, emite se nao;
-7. confere `/health` pela porta 8080 e pelo nginx, e falha com o log do servico se algo nao responder.
-
-E idempotente: rode de novo para trocar dominio, trocar a origem do front ou
-recarregar o binario (apague `api/diesel-api` antes para forcar recompilacao).
-Backup das configs do nginx vai para `/root/backup-nginx-<data>`.
-
-### 3. DNS e firewall da Azure
-
-Registro **A** para o dominio apontando para o IP publico da VM. E abra as portas
-no **Network Security Group** — o firewall da Azure e separado do `ufw`, e esquecer
-disso e o motivo n. 1 de "o nginx subiu mas nao responde":
-
-```bash
-az network nsg rule create -g <grupo> --nsg-name <nsg> -n allow-http   --priority 1001 --destination-port-ranges 80 443 --access Allow --protocol Tcp
-```
-
-Confirme que o DNS propagou antes de rodar o instalador: `dig +short <dominio>`.
-O certbot valida por HTTP e falha se o nome ainda nao resolve.
-
-### 4. Conferir
-
-
-```bash
-curl -s https://api.seudominio.com.br/health
-curl -s https://api.seudominio.com.br/api/previsao | head -20
-curl -sI https://api.seudominio.com.br/api/previsao | grep -i etag
-```
-
-No front:
-
-```js
-const r = await fetch("https://api.seudominio.com.br/api/previsao");
-const previsao = await r.json();
-// previsao.modelo, previsao.previsao_pontual, previsao.p10, previsao.p90
-```
-
-### Comportamento que importa
-
-- **`/health`** reprova por **atraso de dados**, não por erro pontual: uma falha de rede
-  numa execução do cron não derruba a API enquanto a última previsão ainda vale.
-  Retorna 503 quando `ultima_semana_processada` passa de `DIESEL_MAX_ATRASO` dias (10).
-- **Cache por `mtime` + `ETag`**: o arquivo só é relido do disco quando o cron o reescreve.
-  O front que mandar `If-None-Match` recebe `304` e não baixa nada.
-- **Arquivo ainda não gerado** → `503` com mensagem explícita, não `500`.
-- A API **nunca lê JSON pela metade**: o pipeline escreve com `.tmp` + rename atômico.
+O job de treinamento continua com seu ambiente `.venv` e agendamento independentes.
+Não publique `results/api` diretamente no nginx: isso permitiria contornar a autenticação.

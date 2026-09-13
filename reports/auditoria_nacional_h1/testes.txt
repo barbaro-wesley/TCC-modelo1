@@ -1,0 +1,15 @@
+Registro da execução observada pela auditoria (não é log completo da suíte).
+Data de conclusão da auditoria: 2026-09-12
+Repositório: C:\Users\Wesley.Barbaro\Documents\tcc-joao\tcc-mvp
+Commit: d807696953e2d4140b66b79aa76d12913e1e8840
+Python: C:\Users\Wesley.Barbaro\AppData\Local\Programs\Python\Python314\python.exe
+Variáveis: PYTHONDONTWRITEBYTECODE=1; OMP_NUM_THREADS=1; MKL_NUM_THREADS=1
+
+Comando executado no repositório auditado:
+python -m pytest -q -p no:cacheprovider -W ignore::DeprecationWarning tests/test_s10_selection.py tests/test_pinned_windows.py tests/test_s10_production.py tests/test_training_corrections.py tests/test_promote_release.py tests/test_anp_official.py tests/test_calibration.py tests/test_online_learning.py tests/test_walkforward.py
+
+Saída final observada:
+106 passed, 19 subtests passed in 32.37s
+Exit code: 0
+
+Escopo: subconjunto direcionado, não a suíte completa. DeprecationWarnings foram ocultados por opção do comando. Não foram feitos downloads nem gravações nos artefatos de produção.

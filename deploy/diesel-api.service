@@ -1,25 +1,22 @@
 [Unit]
-Description=API de leitura das previsoes do Diesel S-10
+Description=API Python da plataforma Diesel S-10
 Documentation=file:///opt/TCC-modelo1/deploy/README.md
 After=network.target
 
 [Service]
 Type=simple
 User=azureuser
-WorkingDirectory=/opt/TCC-modelo1/api
-ExecStart=/opt/TCC-modelo1/api/diesel-api
+WorkingDirectory=/opt/TCC-modelo1
+ExecStart=/opt/TCC-modelo1/.venv-api/bin/python -m uvicorn api.app.main:create_app --factory --host 127.0.0.1 --port 8080 --workers 2 --proxy-headers --forwarded-allow-ips 127.0.0.1
 
-Environment=DIESEL_DATA_DIR=/opt/TCC-modelo1/results/api
-# Escuta so no loopback: quem fala com a internet e o nginx.
-Environment=DIESEL_ADDR=127.0.0.1:8080
-# Troque pela origem real do front (varias, separadas por virgula).
-Environment=DIESEL_CORS_ORIGINS=https://SEUFRONT.vercel.app
-Environment=DIESEL_MAX_ATRASO=10
+# Configuracao validada e carregada do .env pelo Python.
+Environment=S10_ENVIRONMENT=production
 
 Restart=on-failure
 RestartSec=5s
 
-# A API so le arquivos; nada aqui precisa de escrita.
+# Escritas de negocio vao ao PostgreSQL/Redis; artefatos locais sao somente leitura.
+Environment=PYTHONDONTWRITEBYTECODE=1
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict

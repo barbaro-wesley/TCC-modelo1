@@ -2,24 +2,28 @@
 # Sobe a API do Diesel S-10 atras do nginx com TLS, numa tacada.
 #
 #   sudo ./deploy/instalar_api.sh atlas.creditfy.com.br
-#   sudo ./deploy/instalar_api.sh atlas.creditfy.com.br https://meufront.vercel.app
 #
-# O segundo argumento e a origem do front para o CORS (varias separadas por
-# virgula). Sem ele, fica "*" — aceitavel porque os dados sao publicos e so de
-# leitura, mas prefira a lista.
+# Configure .env antes de executar (Neon, Redis, JWT, hosts e origens).
 #
 # Idempotente: rode de novo para trocar dominio, origem do front ou recarregar
-# o binario. O server_name e reescrito a partir do valor passado, entao nao ha
+# o servico Python. O server_name e reescrito a partir do valor passado, entao nao ha
 # placeholder para esquecer de substituir.
 
 set -euo pipefail
 
 DOMINIO="${1:-}"
-CORS="${2:-*}"
 
 if [ -z "$DOMINIO" ]; then
-  echo "uso: sudo $0 <dominio> [origem-do-front]" >&2
-  echo "ex:  sudo $0 atlas.creditfy.com.br https://meufront.vercel.app" >&2
+  echo "uso: sudo $0 <dominio> (configure as origens em .env)" >&2
+  echo "ex:  sudo $0 atlas.creditfy.com.br" >&2
+  exit 1
+fi
+if [ "$#" -ne 1 ]; then
+  echo "As origens CORS agora devem ser configuradas em S10_CORS_ORIGINS no .env." >&2
+  exit 1
+fi
+if [[ ! "$DOMINIO" =~ ^[a-zA-Z0-9][a-zA-Z0-9.-]+$ ]]; then
+  echo "dominio invalido" >&2
   exit 1
 fi
 if [ "$(id -u)" -ne 0 ]; then
@@ -36,27 +40,28 @@ BACKUP="/root/backup-nginx-$(date +%Y%m%d-%H%M%S)"
 
 echo "==> repo: $ROOT"
 echo "==> dominio: $DOMINIO"
-echo "==> CORS: $CORS"
 echo "==> usuario do servico: $DONO"
 
-# ---------------------------------------------------------------- binario ---
-if [ ! -x "$ROOT/api/diesel-api" ]; then
-  echo "==> compilando a API"
-  if ! command -v go >/dev/null; then
-    echo "Go nao encontrado: sudo apt install -y golang-go" >&2
-    exit 1
-  fi
-  # Compila como o dono do repo para nao deixar binario root-owned no git.
-  sudo -u "$DONO" bash -c "cd '$ROOT/api' && go build -o diesel-api ."
-else
-  echo "==> binario ja existe (apague api/diesel-api para recompilar)"
+# --------------------------------------------------------------- Python ---
+if [ ! -f "$ROOT/.env" ]; then
+  echo "Configure $ROOT/.env usando .env.example antes do deploy." >&2
+  exit 1
 fi
+if ! command -v certbot >/dev/null; then
+  echo "Instale certbot e python3-certbot-nginx antes de publicar autenticacao." >&2
+  exit 1
+fi
+if [ ! -x "$ROOT/.venv-api/bin/python" ]; then
+  sudo -u "$DONO" "${PYTHON_BASE:-python3}" -m venv "$ROOT/.venv-api"
+fi
+sudo -u "$DONO" "$ROOT/.venv-api/bin/python" -m pip install -r "$ROOT/api/requirements.txt"
+cd "$ROOT"
+sudo -u "$DONO" env S10_ENVIRONMENT=production "$ROOT/.venv-api/bin/python" -m alembic -c api/alembic.ini upgrade head
 
 # ---------------------------------------------------------------- systemd ---
 echo "==> instalando o servico"
 sed -e "s#/opt/TCC-modelo1#$ROOT#g" \
     -e "s#^User=.*#User=$DONO#" \
-    -e "s#^Environment=DIESEL_CORS_ORIGINS=.*#Environment=DIESEL_CORS_ORIGINS=$CORS#" \
     "$ROOT/deploy/diesel-api.service" > "$UNIT"
 systemctl daemon-reload
 systemctl enable diesel-api >/dev/null
@@ -112,22 +117,22 @@ fi
 echo
 echo "==> conferindo"
 echo -n "    API direto (8080): "
-curl -fsS http://127.0.0.1:8080/health || { echo "FALHOU"; journalctl -u diesel-api -n 20 --no-pager; exit 1; }
+curl -fsS http://127.0.0.1:8080/health/ready || { echo "FALHOU"; journalctl -u diesel-api -n 20 --no-pager; exit 1; }
 echo
 if [ -d "/etc/letsencrypt/live/$DOMINIO" ]; then
   echo -n "    via nginx (443):   "
-  curl -fsS --resolve "$DOMINIO:443:127.0.0.1" "https://$DOMINIO/health" || { echo "FALHOU"; exit 1; }
+  curl -fsS --resolve "$DOMINIO:443:127.0.0.1" "https://$DOMINIO/health/ready" || { echo "FALHOU"; exit 1; }
 else
   echo -n "    via nginx (80):    "
-  curl -fsS -H "Host: $DOMINIO" http://127.0.0.1/health || { echo "FALHOU"; exit 1; }
+  curl -fsS -H "Host: $DOMINIO" http://127.0.0.1/health/ready || { echo "FALHOU"; exit 1; }
 fi
 echo
 echo
 echo "Pronto."
-echo "  previsao:  https://$DOMINIO/api/previsao"
-echo "  historico: https://$DOMINIO/api/historico"
-echo "  status:    https://$DOMINIO/api/status"
-echo "  health:    https://$DOMINIO/health"
+echo "  login:     https://$DOMINIO/api/v1/auth/login"
+echo "  previsao:  https://$DOMINIO/api/v1/forecast (autenticada)"
+echo "  historico: https://$DOMINIO/api/v1/history (paginada)"
+echo "  health:    https://$DOMINIO/health/ready"
 echo
 echo "  logs:      journalctl -u diesel-api -f"
 echo "  backup:    $BACKUP"

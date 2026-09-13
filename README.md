@@ -60,7 +60,9 @@ Instalação do cron na VPS: veja [`deploy/README.md`](deploy/README.md).
 
 Estado interno em `results/pipeline_state.json`; logs em `logs/`.
 
-Uma API em Go (`api/`, só stdlib) serve esses três arquivos em `/api/previsao`, `/api/historico`, `/api/status` e `/health`, com cache por `mtime` e CORS configurável. Deploy com systemd + nginx + TLS em [`deploy/README.md`](deploy/README.md).
+A API Python/FastAPI em [`api/`](api/README.md) entrega esses resultados com autenticação, empresas, usuários, planos em BRL, assinaturas, cotas mensais no PostgreSQL e rate limit distribuído no Redis. Todas as listagens são paginadas e têm limite global de tamanho e profundidade. As rotas antigas foram substituídas por `/api/v1/forecast`, `/api/v1/history` e `/api/v1/status`.
+
+O backend tem ambiente e dependências próprios; não instala bibliotecas de treinamento para servir HTTP. Consulte [`api/README.md`](api/README.md) para configuração Neon, migrações, testes e criação do administrador. O pipeline científico e os relatórios permanecem separados. A cópia experimental em `reports/auditoria_nacional_h1/implementacao/` é evidência histórica, não é importada nem publicada pela API.
 
 ## Como rodar
 

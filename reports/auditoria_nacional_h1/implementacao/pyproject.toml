@@ -1,0 +1,47 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vs-epl-krls"
+version = "0.2.0"
+description = "Independent online VS-ePL-KRLS regressor for evolving fuzzy time-series models"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {file = "LICENSE"}
+authors = [{name = "Independent research implementation"}]
+dependencies = ["numpy>=1.26", "pandas>=2.0"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Science/Research",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+[project.optional-dependencies]
+experiments = ["matplotlib>=3.8", "scikit-learn>=1.4"]
+production = ["joblib>=1.3", "scikit-learn>=1.4", "statsmodels>=0.14"]
+# Ingestao das fontes causais: requests para HTTP, xlrd para o .xls de precos
+# de produtor da ANP, openpyxl para as planilhas .xlsx de revenda.
+ingest = ["requests>=2.31", "xlrd>=2.0.1", "openpyxl>=3.1"]
+service = ["fastapi>=0.116,<1", "uvicorn[standard]>=0.35,<1", "httpx>=0.28,<1"]
+# ruff tem teto: a partir da 0.13 o conjunto de regras padrao passou a incluir
+# I001, RUF100, C408 e outras, o que reprova centenas de linhas pre-existentes e
+# derruba a CI no passo de lint antes de chegar aos testes.  Subir o teto exige
+# limpar o repo ou fixar `[tool.ruff.lint] select`, nao apenas trocar o numero.
+test = ["pytest>=9.0.3", "pytest-cov>=5", "ruff>=0.12,<0.13", "mypy>=1.17", "pip-audit>=2.9"]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["vs_epl_krls*", "s10_tenancy*"]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+
+[tool.ruff.lint.per-file-ignores]
+"scripts/*.py" = ["E402"]

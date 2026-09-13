@@ -1,4 +1,10 @@
 .venv/
+.venv-api/
+.backend-test-tools/
+.env
+.env.*
+!.env.example
+.ruff_cache/
 __pycache__/
 *.pyc
 *.pyo
@@ -11,5 +17,3 @@ reports/figures/
 *.egg-info/
 .ipynb_checkpoints/
 logs/
-api/diesel-api
-api/diesel-api.exe

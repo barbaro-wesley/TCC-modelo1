@@ -1,0 +1,49 @@
+{
+  "experiment_id": "9afa1b470bcb0b4a5a02ccd78589babe1e1003b2f1ddb1f881d4ae5dc7f96a86",
+  "folds": [
+    "validation_1"
+  ],
+  "holdout_evaluated": false,
+  "metrics": [
+    {
+      "coverage": 1.0,
+      "fallback_count": 0,
+      "fold": "validation_1",
+      "mae": 0.015313264967718343,
+      "mean_width": 0.0651408122348851,
+      "model": "ARIMA",
+      "mse": 0.00028363670407108364,
+      "n": 2,
+      "rmse": 0.016841517273425328,
+      "smape": 0.3273257498020088
+    },
+    {
+      "coverage": 1.0,
+      "fallback_count": 0,
+      "fold": "validation_1",
+      "mae": 0.012500000000000178,
+      "mean_width": 0.0669919999999995,
+      "model": "persistencia",
+      "mse": 0.00022849999999999986,
+      "n": 2,
+      "rmse": 0.01511621645783097,
+      "smape": 0.26714322612178854
+    },
+    {
+      "coverage": 1.0,
+      "fallback_count": 0,
+      "fold": "validation_1",
+      "mae": 0.012809489759289416,
+      "mean_width": 0.0614662029512818,
+      "model": "VS-ePL-KRLS",
+      "mse": 0.00020342653140675707,
+      "n": 2,
+      "rmse": 0.01426276731236814,
+      "smape": 0.27374410792973153
+    }
+  ],
+  "model_selection_performed": false,
+  "production_promoted": false,
+  "scope": "smoke_only",
+  "status": "complete"
+}

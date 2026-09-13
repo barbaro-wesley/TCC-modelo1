@@ -1,0 +1,122 @@
+{
+  "created_at_utc": "2026-09-12T18:06:17.057400+00:00",
+  "development_rows": 598,
+  "development_sha256": "cab23896f3f6ad485338f6bb9535bf818c905978c611e64231146ccbe22e6396",
+  "environment": {
+    "joblib": "1.5.2",
+    "numpy": "2.5.0",
+    "pandas": "3.0.5",
+    "python": "3.14.5",
+    "scikit-learn": "1.9.0",
+    "scipy": "1.16.3",
+    "statsmodels": "0.14.6"
+  },
+  "experiment_id": "9afa1b470bcb0b4a5a02ccd78589babe1e1003b2f1ddb1f881d4ae5dc7f96a86",
+  "protocol": {
+    "allow_anomalous_change": false,
+    "availability_assumption": "Origin price is assumed published before issue; retrospective week labels do not establish actual publication time.",
+    "calibration_rationale": "26 contiguous prior weeks for all models/folds avoid the 2020 ANP gap and retain the three original 52-week development folds. Initial alpha stays nominal with fewer than 40 residuals, as in production; subsequent updates adapt it.",
+    "calibration_weeks": 26,
+    "calibration_window": 156,
+    "candidate": {
+      "adapt_kernel_width": false,
+      "alpha": 0.26,
+      "alpha_vs1": 0.94,
+      "alpha_vs2": 0.74,
+      "beta_initial": 0.18,
+      "beta_min": 0.0001,
+      "beta_recovery_rate": 0,
+      "candidate_id": "tcc_h1_frozen_lags_delta_robust_v1",
+      "center_update": "paper",
+      "dictionary_usage_decay": 1,
+      "enable_rule_merging": false,
+      "error_threshold": 0.5,
+      "feature_scaling": "robust_bounded",
+      "feature_set": "lags",
+      "forgetting_factor": 1,
+      "kernel_sigma": 0.15,
+      "max_dictionary_size": 20,
+      "max_rules": 20,
+      "novelty_factor": 0.1,
+      "regularization": 0.001,
+      "residual_correction_limit": null,
+      "residual_correction_weight": 1,
+      "target_mode": "delta",
+      "threshold_policy": "dynamic"
+    },
+    "candidate_provenance": "Legacy development candidate random_015_lags_delta, frozen with robust_bounded scaling from the corrected pipeline; not a new winner claim.",
+    "development_end": "2024-08-11",
+    "folds": [
+      {
+        "end": "2022-08-14",
+        "id": "validation_1",
+        "start": "2021-08-22"
+      },
+      {
+        "end": "2023-08-13",
+        "id": "validation_2",
+        "start": "2022-08-21"
+      },
+      {
+        "end": "2024-08-11",
+        "id": "validation_3",
+        "start": "2023-08-20"
+      }
+    ],
+    "holdout_policy": "2024-08-18..2026-08-09 already consulted; inaccessible to evaluator; not independent final evidence.",
+    "horizon_weeks": 1,
+    "models": [
+      "ARIMA",
+      "persistencia",
+      "VS-ePL-KRLS"
+    ],
+    "protocol_version": "national-h1-production-replay-v1",
+    "scope": "ANP national Diesel B S10 resale price in BRL/litre; endogenous features only",
+    "selection_policy": "No search or promotion in this protocol. Compare all three fixed models on development only."
+  },
+  "raw_source": {
+    "path": "C:\\Users\\Wesley.Barbaro\\Documents\\tcc-joao\\tcc-mvp\\data\\raw\\anp_semanal_desde_2013.xlsx",
+    "sha256": "c51f1bf7ff651be4cb7240f004105cc7dbf87973b76763eb5585ba12cdf2db17"
+  },
+  "repository": "C:/Users/Wesley.Barbaro/Documents/tcc-joao/tcc-mvp",
+  "schema_version": 1,
+  "source_commit": "d807696953e2d4140b66b79aa76d12913e1e8840",
+  "source_hashes": {
+    "scripts/06_train_s10_production.py": "67d78129ee792d8f7da584fa0fe0c2ae6fe2f8bba0f41293ae55deb93624afa1",
+    "scripts/34_s10_frozen_experiment.py": "2b7f747afaab8f71f87f9bec23b1efba506b6b589d01b148e5abd36a2883cb4c",
+    "src/vs_epl_krls/__init__.py": "fd2f2d72f46fdf79416a942c6e33051b8e679fd856237afc399f4da04d664cc4",
+    "src/vs_epl_krls/anp_official.py": "cca78f3e2a5283ab6421942520ee569f8684738feb54cf74729cfcad864e426e",
+    "src/vs_epl_krls/api.py": "edb7dab8b626d9067d5dc40f909c0b87e2fb938f7a54163ecde41cb2dd0cef8d",
+    "src/vs_epl_krls/audit.py": "9fd1993596e3c0769f10df555002b09269343df5ac1c25d3d5a363698621c1a3",
+    "src/vs_epl_krls/calibration.py": "a60661f2c2abd2bf285d3be307d39fb3d025912521c2b247cb80c9d4575b710c",
+    "src/vs_epl_krls/causal_ingest.py": "1022b3578082ac5ea71d09aa4780e4bfdcfc00954427fe6b8fca6bb41101b189",
+    "src/vs_epl_krls/conditional_interval.py": "2d2376ebe6c50b6309f91dadf6402dc0712eb100859bf9ede63063efb2a47983",
+    "src/vs_epl_krls/decision.py": "df783b6ffabcc30b1223449928fa797956277cfa0d74b8b15e68271ce6656f7a",
+    "src/vs_epl_krls/experiment.py": "5341cb00531352541f65709912da70fe592144442248522ce6c64630f37965da",
+    "src/vs_epl_krls/fuel.py": "7ba7ee749d930f0dda8c469ac723b7aac588821f85020d3f9a2088356f9e3ad7",
+    "src/vs_epl_krls/gates.py": "b2989c75b65995c63982a8d3b3a6b9dc78d699b10e2e3b4e11c44821fc424ea3",
+    "src/vs_epl_krls/hybrid.py": "4941cf5c10cffdc7da16fe852afd8a0b60d1e1bc179ac840bdc1df77f506030e",
+    "src/vs_epl_krls/kernels.py": "5c4319531c5dbde7975a2dbe78c2f00dcfdf719611df9e442c5b910296c3fbc6",
+    "src/vs_epl_krls/krls.py": "e042a424a69be42838a4b5b5b4ba30473ac444e7f5aa829b271adb504cef7e79",
+    "src/vs_epl_krls/metrics.py": "7d8bd58c6572ea2d6ddf977207bc20b8247f2df1d35f8c5f0bfe15ca5c6ba44c",
+    "src/vs_epl_krls/model.py": "c8f129443818590c9a7ecf209e0d0544f1866c1b3f2b88cad22e7b133c9d586d",
+    "src/vs_epl_krls/monitoring.py": "a6c6f63adf7564f4c74f3c2b1de94849a1146e80c6eae4bef96f2eb5adad4f67",
+    "src/vs_epl_krls/news.py": "5c1142237840fbc0e3b54c25c89812b08109e94e2c612a98a2169a2638d4e8f9",
+    "src/vs_epl_krls/news_annotation.py": "56bc5970186ff3d3f21cecb88cf22fc41de17bbba85c5c61dfd357038a24cf23",
+    "src/vs_epl_krls/news_annotation_simulation.py": "efb6e5556a43589f2e30a9644abe5c9543eb8f08279286897f76aa03cd822a64",
+    "src/vs_epl_krls/news_pressure.py": "37ec96e2f5e79d7c6c7d6840267609c93e5e63db911334f805450108e1262217",
+    "src/vs_epl_krls/passthrough.py": "77fe60e7d05772601b8d95e3b8dfe91c0ac696f11bb03c02b1b349af1e1effc1",
+    "src/vs_epl_krls/performance.py": "669c321098ed461869eb41774e050f14187c9e90b868bbf8ea50a4e51fbf0fb2",
+    "src/vs_epl_krls/pressure.py": "23c47b3ba8b171e25a3e0066c4650b98bf9ee9b4ef5fdcd5107515ecfd084605",
+    "src/vs_epl_krls/procurement.py": "36f0e0981f175de1b73a3e1a32d2d01cd6be7d5c3a7a260cb3c1118af3571157",
+    "src/vs_epl_krls/product.py": "b1d4fbd1c98b4ffa27fdaf6f84292b712a59a42767b136cdfdef90747f8773a4",
+    "src/vs_epl_krls/production.py": "a9887419830792dfe018ca25e27c7e85de12542f7ce71c1706020c1082a0b110",
+    "src/vs_epl_krls/regional.py": "ce3fa99646cb5ebe3c63c694ec0708407fe6cf8056deda14f484640ea9e86fa3",
+    "src/vs_epl_krls/rule.py": "caf043b1881841f3dd22af4b51fb900ee6c5414cd18e47a73cce0be116a0ce61",
+    "src/vs_epl_krls/selection.py": "9dcce3b848215319f580d7e7aacb94a5a70fa510e627cf13749637160e1179f0",
+    "src/vs_epl_krls/shadow.py": "450e4deaa64a0ae0c6e4c73894a190315043100a4471c6cae81d1239ee9f38bf",
+    "src/vs_epl_krls/utils.py": "13ab2a496ca991f80fa8b4e4d2b196ca871c6ae63cc074d15bd7580fb3b892de",
+    "src/vs_epl_krls/weekly.py": "0f3efb57f6c3408464bc08699a6c440270a3cc3ec0ea453e525725925403855f"
+  },
+  "status": "frozen_development_protocol_not_preregistered_before_legacy_holdout"
+}

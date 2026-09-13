@@ -1,0 +1,228 @@
+{
+  "repository": "C:\\Users\\Wesley.Barbaro\\Documents\\tcc-joao\\tcc-mvp",
+  "commit": "d807696953e2d4140b66b79aa76d12913e1e8840",
+  "python": "3.14.5",
+  "numpy": "2.5.0",
+  "pandas": "3.0.5",
+  "data": {
+    "n": 705,
+    "start": "2012-12-30",
+    "end": "2026-08-30",
+    "sha256": "c51f1bf7ff651be4cb7240f004105cc7dbf87973b76763eb5585ba12cdf2db17",
+    "windows": {
+      "pinned_by": "calendar dates, not panel length",
+      "holdout_start_date": "2024-08-18",
+      "holdout_end_date": "2026-08-09",
+      "development_end_index": 559,
+      "folds": [
+        {
+          "fold_id": "validation_1",
+          "validation_start": 403,
+          "validation_end": 455
+        },
+        {
+          "fold_id": "validation_2",
+          "validation_start": 455,
+          "validation_end": 507
+        },
+        {
+          "fold_id": "validation_3",
+          "validation_start": 507,
+          "validation_end": 559
+        }
+      ],
+      "holdout": {
+        "fold_id": "holdout",
+        "validation_start": 559,
+        "validation_end": 663
+      },
+      "prospective_weeks": 3
+    }
+  },
+  "calendar_mismatches": [],
+  "future_labels_at_evaluated_origins": [],
+  "features_unchanged_by_future": {
+    "price": true,
+    "lags": true,
+    "dynamics": true
+  },
+  "vs_current_target_perturbation": {
+    "first_prediction_equal": true,
+    "next_prediction_changes_when_label_arrives": true
+  },
+  "vs_reexecution": {
+    "metrics": {
+      "mse": 0.004068954684707616,
+      "rmse": 0.06378835853592421,
+      "mae": 0.029561117586581618,
+      "smape": 0.49286547816440796
+    },
+    "evaluation_scope": "last development fold only; legacy candidate parameters with current calendar code",
+    "target_start": "2023-08-20",
+    "target_end": "2024-08-11",
+    "n": 52
+  },
+  "legacy_manifest": {
+    "pipeline_version": null,
+    "has_validation_fingerprint": false,
+    "stored_candidate": {
+      "candidate_id": "random_015_lags_delta",
+      "feature_set": "lags",
+      "target_mode": "delta",
+      "alpha": 0.26,
+      "beta_initial": 0.18,
+      "alpha_vs1": 0.94,
+      "alpha_vs2": 0.74,
+      "error_threshold": 0.5,
+      "kernel_sigma": 0.15,
+      "regularization": 0.001,
+      "novelty_factor": 0.1,
+      "max_dictionary_size": 20,
+      "max_rules": 20,
+      "beta_min": 0.0001,
+      "beta_recovery_rate": 0.0,
+      "forgetting_factor": 1.0,
+      "dictionary_usage_decay": 1.0,
+      "residual_correction_weight": 1.0,
+      "residual_correction_limit": null,
+      "center_update": "paper",
+      "threshold_policy": "dynamic",
+      "enable_rule_merging": false,
+      "adapt_kernel_width": false,
+      "feature_scaling": "minmax"
+    },
+    "current_default_scaling": "robust_bounded"
+  },
+  "saved_interval_recalculation": {
+    "coverage": 0.9230769230769231,
+    "width": 0.1209689512572919,
+    "n_calibration": 156,
+    "n_test": 104,
+    "original_nominal_coverage": 0.8
+  },
+  "holdout_changes_approved_model": {
+    "rmse_1_01": "ensemble",
+    "rmse_1_03": "ARIMA"
+  },
+  "loaded_bundle": {
+    "stored_artifact_version": "1.2.0",
+    "metadata_reported_version": "1.2.0",
+    "stored_forecast": {
+      "target_date": "2026-09-06",
+      "point": 6.88,
+      "p10": 6.840634627352918,
+      "p90": 6.90220416380953,
+      "primary_model": "ARIMA",
+      "fallback_used": false,
+      "fallback_reason": null,
+      "components": {
+        "ARIMA": 6.88,
+        "Ridge": 6.877633077790051,
+        "persistencia": 6.88,
+        "VS-ePL-KRLS": 6.875235310133983,
+        "ensemble": 6.878570593040195
+      },
+      "last_observed_date": "2026-08-30",
+      "last_observed_price": 6.88,
+      "data_fingerprint": "0c86155ba61673b6edb304b12d48e8af0e1e1a2e9d5506e9b1e25b4f3d95f6c4"
+    },
+    "loaded_forecast": {
+      "target_date": "2026-09-06",
+      "point": 6.88,
+      "p10": 6.840634627352918,
+      "p90": 6.90220416380953,
+      "primary_model": "ARIMA",
+      "fallback_used": false,
+      "fallback_reason": null,
+      "components": {
+        "ARIMA": 6.88,
+        "Ridge": 6.877633077790051,
+        "persistencia": 6.88,
+        "VS-ePL-KRLS": 6.875235310133983,
+        "ensemble": 6.878570593040195
+      },
+      "last_observed_date": "2026-08-30",
+      "last_observed_price": 6.88,
+      "data_fingerprint": "0c86155ba61673b6edb304b12d48e8af0e1e1a2e9d5506e9b1e25b4f3d95f6c4"
+    },
+    "exact_forecast_matches": true
+  },
+  "online_gap_accepted": {
+    "accepted": false,
+    "error": "new observation must match the forecast target date; missing week",
+    "forecast_scored_target": "2026-09-06",
+    "observation_date": "2026-09-13",
+    "interval_samples_added": 0,
+    "warning": [
+      "dictionary_capacity_pressure",
+      "dictionary_replacement_churn",
+      "beta_floor_pressure"
+    ]
+  },
+  "interval_rule_comparison": {
+    "alpha": 0.34400000000000014,
+    "same_point": true,
+    "loaded_interval": [
+      6.840634627352918,
+      6.90220416380953
+    ],
+    "after_repeating_warm_start": [
+      6.840634627352918,
+      6.90220416380953
+    ],
+    "fixed_10_90_interval_same_point": [
+      6.816470898363964,
+      6.937439849621256
+    ],
+    "online_samples": 0
+  },
+  "production_ledger": {
+    "valid_hash_chain": true,
+    "records": 3,
+    "events": [
+      {
+        "event": "bootstrap_forecast",
+        "recorded_at_utc": "2026-08-24T02:23:37.699632+00:00",
+        "target_date": "2026-08-16"
+      },
+      {
+        "event": "official_observation",
+        "recorded_at_utc": "2026-08-24T02:23:39.001204+00:00",
+        "target_date": "2026-08-16"
+      },
+      {
+        "event": "release",
+        "recorded_at_utc": "2026-08-24T02:23:39.033484+00:00",
+        "target_date": "2026-08-23"
+      }
+    ]
+  },
+  "latest_release_pointer": {
+    "target_date": "2026-08-23",
+    "last_observation": "2026-08-16",
+    "sha256": "8c6188383eb6b19b51bba7a54710658a26d185c2553d71f289b878c7ba10cb2d",
+    "current_training_target": "2026-09-06",
+    "same_artifact_as_training": false
+  },
+  "raw_input_preview_shape": [
+    25,
+    16
+  ],
+  "source_sha256": {
+    "src/vs_epl_krls/selection.py": "9dcce3b848215319f580d7e7aacb94a5a70fa510e627cf13749637160e1179f0",
+    "src/vs_epl_krls/production.py": "4fc7b7cacc7b44c5f728d01dd15b01371b2a407cbbd4ccad913c279ab3eb2e0a",
+    "scripts/05_s10_model_selection.py": "479ac6cc52644358093333588ef929bd265044290f4e23a7224c5e742d057a3b",
+    "scripts/06_train_s10_production.py": "e22bada61c351d695d039b650a6da8cad2d7057d31be806e4c192e23ea1eac3f"
+  },
+  "snapshot_unchanged_during_run": true,
+  "snapshot_sha256": {
+    "src/vs_epl_krls/selection.py": "9dcce3b848215319f580d7e7aacb94a5a70fa510e627cf13749637160e1179f0",
+    "src/vs_epl_krls/production.py": "4fc7b7cacc7b44c5f728d01dd15b01371b2a407cbbd4ccad913c279ab3eb2e0a",
+    "scripts/05_s10_model_selection.py": "479ac6cc52644358093333588ef929bd265044290f4e23a7224c5e742d057a3b",
+    "scripts/06_train_s10_production.py": "e22bada61c351d695d039b650a6da8cad2d7057d31be806e4c192e23ea1eac3f",
+    "reports/vs_epl_krls/s10_production/forecast.json": "b0f4781b405cdb38b000f42b429bdc42f0abb9c5a2436a14f84c1fef642a1da9",
+    "reports/vs_epl_krls/s10_selection/selection_manifest_h1.json": "3cc7e4d0ca9fe23ec4dab0185562b04d780496eb3bcde5b8883ed0e173f3a6c5",
+    "data/raw/anp_semanal_desde_2013.xlsx": "c51f1bf7ff651be4cb7240f004105cc7dbf87973b76763eb5585ba12cdf2db17",
+    "artifacts/s10_production.joblib": "bb7d0aa61f3df2f633bd00983538600b66b9f32edac019659264698ebc036550"
+  }
+}

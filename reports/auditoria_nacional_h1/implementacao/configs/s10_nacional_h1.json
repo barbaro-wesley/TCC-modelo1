@@ -1,0 +1,62 @@
+{
+  "protocol_version": "national-h1-production-replay-v1",
+  "scope": "ANP national Diesel B S10 resale price in BRL/litre; endogenous features only",
+  "horizon_weeks": 1,
+  "models": [
+    "ARIMA",
+    "persistencia",
+    "VS-ePL-KRLS"
+  ],
+  "development_end": "2024-08-11",
+  "folds": [
+    {
+      "id": "validation_1",
+      "start": "2021-08-22",
+      "end": "2022-08-14"
+    },
+    {
+      "id": "validation_2",
+      "start": "2022-08-21",
+      "end": "2023-08-13"
+    },
+    {
+      "id": "validation_3",
+      "start": "2023-08-20",
+      "end": "2024-08-11"
+    }
+  ],
+  "calibration_weeks": 26,
+  "calibration_rationale": "26 contiguous prior weeks for all models/folds avoid the 2020 ANP gap and retain the three original 52-week development folds. Initial alpha stays nominal with fewer than 40 residuals, as in production; subsequent updates adapt it.",
+  "calibration_window": 156,
+  "allow_anomalous_change": false,
+  "selection_policy": "No search or promotion in this protocol. Compare all three fixed models on development only.",
+  "holdout_policy": "2024-08-18..2026-08-09 already consulted; inaccessible to evaluator; not independent final evidence.",
+  "candidate_provenance": "Legacy development candidate random_015_lags_delta, frozen with robust_bounded scaling from the corrected pipeline; not a new winner claim.",
+  "availability_assumption": "Origin price is assumed published before issue; retrospective week labels do not establish actual publication time.",
+  "candidate": {
+    "candidate_id": "tcc_h1_frozen_lags_delta_robust_v1",
+    "feature_set": "lags",
+    "target_mode": "delta",
+    "alpha": 0.26,
+    "beta_initial": 0.18,
+    "alpha_vs1": 0.94,
+    "alpha_vs2": 0.74,
+    "error_threshold": 0.5,
+    "kernel_sigma": 0.15,
+    "regularization": 0.001,
+    "novelty_factor": 0.1,
+    "max_dictionary_size": 20,
+    "max_rules": 20,
+    "beta_min": 0.0001,
+    "beta_recovery_rate": 0,
+    "forgetting_factor": 1,
+    "dictionary_usage_decay": 1,
+    "residual_correction_weight": 1,
+    "residual_correction_limit": null,
+    "center_update": "paper",
+    "threshold_policy": "dynamic",
+    "enable_rule_merging": false,
+    "adapt_kernel_width": false,
+    "feature_scaling": "robust_bounded"
+  }
+}
