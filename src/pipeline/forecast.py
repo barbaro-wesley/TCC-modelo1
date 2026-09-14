@@ -18,6 +18,7 @@ from benchmarks.classical import arima_forecast, arimax_forecast, ma_predict, na
 from benchmarks.gbm import fit_lgbm, fit_xgb
 from data.panel import ARIMAX_COLS, latest_features, load_features, load_panel, scale_frozen
 from eval.intervals import direction_probs
+from eval.temporal import TEMPORAL_PROTOCOL, weekly_history_starts
 from vsepl_krls.model import VSePLKRLS, VSePLKRLSConfig
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -33,7 +34,9 @@ MODELOS_PRODUCAO = ("ARIMA", "ARIMAX", "naive", "media_movel", "LightGBM", "XGBo
 
 def _serie_precos() -> np.ndarray:
     full = load_features()
-    return full["revenda"].astype(float).dropna().to_numpy()
+    full = full.dropna(subset=["revenda"])
+    start = weekly_history_starts(len(full), full["data"])[-1]
+    return full["revenda"].astype(float).iloc[start:].to_numpy()
 
 
 def _prever_vsepl(panel: pd.DataFrame, feat_cols: list, x_last: np.ndarray) -> float:
@@ -51,10 +54,19 @@ def _prever_vsepl(panel: pd.DataFrame, feat_cols: list, x_last: np.ndarray) -> f
     return float(model.predict_one(xt))
 
 
-def _prever_arimax(panel: pd.DataFrame) -> float:
-    precos = panel["y_prev"].to_numpy(float)
-    exog = panel[ARIMAX_COLS].to_numpy(float)
-    fc, _ = arimax_forecast(precos, exog, exog[-1:], steps=1)
+def _prever_arimax(horizon: int = 1) -> float:
+    # Unlike the supervised panel, this history includes the latest observed
+    # week, whose future target is not yet known.
+    full = load_features()
+    if full.iloc[-1][ARIMAX_COLS + ["revenda"]].isna().any():
+        raise ValueError("Ultima semana sem preco/exogenas para ARIMAX")
+    full = full.dropna(subset=ARIMAX_COLS + ["revenda"])
+    start = weekly_history_starts(len(full), full["data"])[-1]
+    full = full.iloc[start:]
+    precos = full["revenda"].to_numpy(float)
+    exog = full[ARIMAX_COLS].to_numpy(float)
+    future = np.repeat(exog[-1:], horizon, axis=0)
+    fc, _ = arimax_forecast(precos, exog, future, steps=horizon)
     return float(fc[-1])
 
 
@@ -77,7 +89,7 @@ def previsoes_por_modelo(horizon: int = 1) -> Dict[str, float]:
         out["ARIMA"] = float("nan")
         print(f"  [previsao] ARIMA falhou: {exc}")
     try:
-        out["ARIMAX"] = _prever_arimax(panel)
+        out["ARIMAX"] = _prever_arimax(horizon)
     except Exception as exc:
         out["ARIMAX"] = float("nan")
         print(f"  [previsao] ARIMAX falhou: {exc}")
@@ -98,8 +110,15 @@ def previsoes_por_modelo(horizon: int = 1) -> Dict[str, float]:
 
 def ranking_h1() -> pd.DataFrame:
     tabela = pd.read_csv(RES / "semanal_benchmarks.csv")
+    _check_protocol(tabela)
     h1 = tabela[tabela.horizon == 1].sort_values("rmse").reset_index(drop=True)
     return h1
+
+
+def _check_protocol(frame: pd.DataFrame) -> None:
+    if (frame.empty or "temporal_protocol" not in frame
+            or not frame["temporal_protocol"].eq(TEMPORAL_PROTOCOL).all()):
+        raise ValueError("Artefatos de protocolo antigo: reexecute 03_semanal.py antes de publicar")
 
 
 def escolher_vencedor(disponiveis: Dict[str, float]) -> tuple:
@@ -123,6 +142,7 @@ def residuos_walkforward(modelo: str, horizon: int = 1) -> np.ndarray:
     if not path.exists():
         return np.array([], dtype=float)
     wf = pd.read_csv(path)
+    _check_protocol(wf)
     if modelo not in wf.columns:
         return np.array([], dtype=float)
     resid = wf["y"].astype(float) - wf[modelo].astype(float)
@@ -132,6 +152,8 @@ def residuos_walkforward(modelo: str, horizon: int = 1) -> np.ndarray:
 
 def montar_previsao(horizon: int = 1) -> dict:
     """Payload completo da previsao publicada: vencedor, intervalo e alternativas."""
+    if horizon != 1:
+        raise ValueError("Publicacao seleciona ranking h=1; outros horizontes exigem ranking proprio")
     panel = load_panel(horizon)
     feat_cols = panel.attrs["feat_cols"]
     _, ultima_data, ultimo_preco = latest_features(feat_cols)
@@ -151,6 +173,7 @@ def montar_previsao(horizon: int = 1) -> dict:
     semana_alvo = pd.Timestamp(ultima_data) + pd.Timedelta(weeks=horizon)
     ranking = ranking_h1()[["model", "rmse", "mae", "smape", "dir_acc"]]
     return {
+        "temporal_protocol": TEMPORAL_PROTOCOL,
         "modelo": vencedor,
         "criterio_selecao": "menor RMSE walk-forward em h=1",
         "rmse_walkforward": rmse_wf,

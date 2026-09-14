@@ -13,6 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from benchmarks.lstm import fit_lstm, predict_lstm  # noqa: E402
+from eval.temporal import training_ends, weekly_history_starts  # noqa: E402
 
 
 def main():
@@ -23,17 +24,22 @@ def main():
     seq_len = int(sys.argv[5]) if len(sys.argv) > 5 else 8
     data = np.load(npz_path)
     X, y = data["X"], data["y"]
+    dates = data["origin_dates"] if "origin_dates" in data else None
+    target_dates = data["target_dates"] if "target_dates" in data else None
+    ends = training_ends(len(y), horizon, dates, target_dates)
+    starts = weekly_history_starts(len(y), dates)
     yhat = np.full(len(y), np.nan)
     model = None
     last = -10**9
     for t in range(max(n_min, seq_len), len(y)):
-        te = max(0, t - horizon + 1)
-        if te < seq_len + 8:
+        te = ends[t]
+        if te < seq_len + 8 or t - starts[t] < seq_len:
             continue
         if t - last >= refit_every or model is None:
-            model = fit_lstm(X[:te], y[:te], seq_len=seq_len, epochs=8, hidden=8)
+            model = fit_lstm(X[:te], y[:te], seq_len=seq_len, epochs=8, hidden=8,
+                             dates=None if dates is None else dates[:te])
             last = t
-        yhat[t] = predict_lstm(model, X[:te], seq_len=seq_len)
+        yhat[t] = predict_lstm(model, X[:t], seq_len=seq_len)
     out = npz_path.with_name(npz_path.stem + "_yhat.npy")
     np.save(out, yhat)
     print("lstm_ok", int(np.isfinite(yhat).sum()))

@@ -1,5 +1,10 @@
 # Previsão do Diesel B S-10 (Brasil)
 
+> Correção temporal: o código agora usa o protocolo `calendar-mature-labels-v1`.
+> As métricas e a previsão histórica abaixo ainda não foram recalculadas com ele.
+> Reexecute os experimentos antes de usá-las como validação do código corrigido.
+> Escopo, testes e limitações: [correções temporais](reports/08_correcoes_temporais.md).
+
 Três blocos separados:
 
 1. **Reprodução do artigo** (mensal, dez/2012–mai/2020) — **não reproduzido** no critério de ±10% (melhor RMSE 0,077 vs 0,060).

@@ -52,8 +52,12 @@ def coverage(y: np.ndarray, lo: np.ndarray, hi: np.ndarray) -> float:
     y = np.asarray(y, dtype=float).ravel()
     lo = np.asarray(lo, dtype=float).ravel()
     hi = np.asarray(hi, dtype=float).ravel()
-    n = min(len(y), len(lo), len(hi))
-    return float(np.mean((y[:n] >= lo[:n]) & (y[:n] <= hi[:n])))
+    if not len(y) == len(lo) == len(hi):
+        raise ValueError("Coverage requires aligned arrays of equal length")
+    mask = np.isfinite(y) & np.isfinite(lo) & np.isfinite(hi)
+    if not mask.any():
+        return float("nan")
+    return float(np.mean((y[mask] >= lo[mask]) & (y[mask] <= hi[mask])))
 
 
 def summarize(y: np.ndarray, yhat: np.ndarray, y_prev: Optional[np.ndarray] = None) -> Dict[str, float]:

@@ -144,6 +144,25 @@ def build_weekly_features(weekly: pd.DataFrame, brent: pd.Series, usdbrl: pd.Ser
     else:
         df["ulsd"] = np.nan
     df["brent_brl"] = df["brent"] * df["usdbrl"]
+    return add_weekly_lags(df)
+
+
+def add_weekly_lags(df: pd.DataFrame) -> pd.DataFrame:
+    """Rebuild lags/windows within uninterrupted weekly observation blocks.
+
+    No price imputation across missing weeks. Restart the warm-up after a gap.
+    Also used when reading older feature caches built with positional lags.
+    """
+    df = df.sort_values("data").reset_index(drop=True).copy()
+    if df.empty:
+        raise ValueError("Empty weekly series")
+    if df["data"].isna().any() or df["data"].duplicated().any():
+        raise ValueError("Weekly observation dates must be unique and non-null")
+    blocks = df["data"].diff().ne(pd.Timedelta(weeks=1)).cumsum()
+    return pd.concat([_lagged_block(block) for _, block in df.groupby(blocks)], ignore_index=True)
+
+
+def _lagged_block(df: pd.DataFrame) -> pd.DataFrame:
     df = petrobras_proxy(df)
     r = df["revenda"].astype(float)
     dlog = np.log(r).diff()

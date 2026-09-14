@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from typing import Tuple
-
 import numpy as np
 import torch
 import torch.nn as nn
+
+from benchmarks.sequences import make_sequences
 
 
 class TinyLSTM(nn.Module):
@@ -18,16 +18,6 @@ class TinyLSTM(nn.Module):
         return self.head(out[:, -1, :]).squeeze(-1)
 
 
-def make_sequences(X: np.ndarray, y: np.ndarray, seq_len: int) -> Tuple[np.ndarray, np.ndarray]:
-    xs, ys = [], []
-    for t in range(seq_len, len(y)):
-        xs.append(X[t - seq_len : t])
-        ys.append(y[t])
-    if not xs:
-        return np.zeros((0, seq_len, X.shape[1])), np.zeros((0,))
-    return np.asarray(xs, dtype=np.float32), np.asarray(ys, dtype=np.float32)
-
-
 def fit_lstm(
     X: np.ndarray,
     y: np.ndarray,
@@ -37,9 +27,10 @@ def fit_lstm(
     lr: float = 1e-2,
     model=None,
     seed: int = 0,
+    dates=None,
 ):
     torch.manual_seed(seed)
-    Xs, ys = make_sequences(X, y, seq_len)
+    Xs, ys = make_sequences(X, y, seq_len, dates=dates)
     if len(ys) < 8:
         return None
     if model is None:

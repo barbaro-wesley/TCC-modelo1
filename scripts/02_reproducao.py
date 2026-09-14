@@ -12,6 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from eval.metrics import summarize  # noqa: E402
+from eval.temporal import training_ends  # noqa: E402
 from vsepl_krls.model import VSePLKRLS, VSePLKRLSConfig  # noqa: E402
 from vsepl_krls.paper import (  # noqa: E402
     EPL_KRLS_S10_H1,
@@ -30,28 +31,43 @@ FIG = ROOT / "reports" / "figures"
 REP = ROOT / "reports"
 
 
-def run_one(X, y, n_train, cfg: VSePLKRLSConfig, seed_update: bool = True):
+def run_one(X, y, n_train, cfg: VSePLKRLSConfig, seed_update: bool = True,
+            horizon: int = 1, origin_dates=None, target_dates=None):
+    if not 0 < n_train < len(y):
+        raise ValueError("n_train must leave both training inputs and test origins")
+    ends = training_ends(len(y), horizon, origin_dates, target_dates)
     Xtr, Xte, _ = scale_inputs_train_only(X[:n_train], X[n_train:])
     ytr, yte = y[:n_train], y[n_train:]
     model = VSePLKRLS(cfg)
-    for i in range(len(ytr)):
+    initial_end = int(ends[n_train])
+    if initial_end == 0:
+        raise ValueError("No mature labels at the first test origin")
+    for i in range(initial_end):
         model.update(Xtr[i], float(ytr[i]))
+    learned = initial_end
+    Xscaled = np.concatenate([Xtr, Xte])
     preds = []
     for i in range(len(yte)):
+        if seed_update:
+            while learned < ends[n_train + i]:
+                model.update(Xscaled[learned], float(y[learned]))
+                learned += 1
         yhat = model.predict_one(Xte[i])
         preds.append(yhat)
-        if seed_update:
-            model.update(Xte[i], float(yte[i]))
     preds = np.asarray(preds, dtype=float)
     metrics = summarize(yte, preds)
     metrics["n_rules"] = float(model.n_rules)
     metrics["beta_final"] = float(model.beta)
     metrics["ndei_full"] = float(metrics["rmse"] / 0.453)
+    metrics["n_initial_mature_labels"] = initial_end
     return metrics, preds, yte, model
 
 
 def experiment(horizon: int, convention: str, vs: bool):
     df = pd.read_csv(PROC / "mensal_s10_artigo.csv", parse_dates=["data"])
+    months = pd.PeriodIndex(df["data"], freq="M")
+    if not months.equals(pd.period_range(months[0], periods=len(months), freq="M")):
+        raise ValueError("Monthly experiment requires a complete ordered monthly calendar")
     X, y, idx = make_supervised(df["revenda"].to_numpy(), df["distribuicao"].to_numpy(), horizon)
     extra = monthly_params(horizon) if vs else dict(gamma_bar=0.006, alpha_vs1=0.88, alpha_vs2=0.74)
     n_train = {1: 72, 6: 66, 12: 60}[horizon]
@@ -60,7 +76,10 @@ def experiment(horizon: int, convention: str, vs: bool):
         use_variable_step=vs,
         **extra,
     )
-    metrics, preds, yte, model = run_one(X, y, n_train, cfg)
+    metrics, preds, yte, model = run_one(
+        X, y, n_train, cfg, horizon=horizon,
+        origin_dates=df["data"].iloc[idx], target_dates=df["data"].iloc[idx + horizon],
+    )
     return {
         "horizon": horizon,
         "convention": convention,
@@ -149,7 +168,8 @@ def main():
         "",
         "Janela historica: dezembro/2012 a maio/2020, Diesel S-10 nacional, previsao mensal.",
         "Entrada: `[preco_distribuicao(t), preco_revenda(t)]`. Alvo: `preco_revenda(t+h)`.",
-        "Normalizacao min-max apenas no treino. Teste: prever antes de atualizar.",
+        "Normalizacao min-max nas entradas iniciais; rotulos liberados somente na data do alvo.",
+        "Convencao: observacao da origem ja publicada. Datas reais de publicacao nao verificadas.",
         "",
         "## Criterio (fixado antes de rodar)",
         "REPRODUZIDO se RMSE, MAE e NDEI ficarem a ±10% dos valores publicados e o numero de regras coincidir.",

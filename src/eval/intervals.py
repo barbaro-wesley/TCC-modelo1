@@ -4,19 +4,27 @@ from typing import Dict, Tuple
 
 import numpy as np
 
+from eval.temporal import training_ends
+
 
 def conformal_p10_p90(
     residuals: np.ndarray,
     yhat: np.ndarray,
     min_resid: int = 20,
+    horizon: int = 1,
+    origin_dates=None,
+    target_dates=None,
 ) -> Tuple[np.ndarray, np.ndarray]:
-    """Expanding residual quantiles applied to the current point forecast."""
+    """Quantiles of residuals whose targets are already observed at the origin."""
     n = len(yhat)
     lo = np.full(n, np.nan)
     hi = np.full(n, np.nan)
     r = np.asarray(residuals, dtype=float)
+    if len(r) != n:
+        raise ValueError("Residuals and predictions must have equal lengths")
+    ends = training_ends(n, horizon, origin_dates, target_dates)
     for t in range(n):
-        hist = r[:t]
+        hist = r[:ends[t]]
         hist = hist[np.isfinite(hist)]
         if len(hist) < min_resid:
             continue

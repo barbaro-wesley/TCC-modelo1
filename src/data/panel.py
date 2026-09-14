@@ -14,6 +14,8 @@ from typing import Tuple
 import numpy as np
 import pandas as pd
 
+from data.build import add_weekly_lags
+
 PROC = Path(__file__).resolve().parents[2] / "data" / "processed"
 
 FEATURE_COLS = [
@@ -22,9 +24,11 @@ FEATURE_COLS = [
     "vol4", "vol12",
     "brent_l1", "brent_l4", "brent_brl_l1", "brent_brl_l4",
     "usdbrl_l1", "usdbrl_l4",
-    "ulsd_l1", "ulsd_l4",
     "petrobras_reajuste_l1", "paridade_z_l1",
 ]
+
+# Fixed before evaluation: ULSD is unavailable at the source. Do not select
+# features using completeness of the entire (including future) sample.
 
 ARIMAX_COLS = ["brent_l1", "usdbrl_l1"]
 
@@ -34,20 +38,29 @@ GAP_END = pd.Timestamp("2020-10-17")
 
 def load_features() -> pd.DataFrame:
     df = pd.read_csv(PROC / "semanal_s10_features.csv", parse_dates=["data"])
-    return df.sort_values("data").reset_index(drop=True)
+    return add_weekly_lags(df)
 
 
 def load_panel(horizon: int) -> pd.DataFrame:
     """Painel de treino/avaliacao para um horizonte: y = preco h semanas a frente."""
+    if horizon < 1:
+        raise ValueError("horizon must be positive")
     df = load_features()
     df["y"] = df["revenda"].shift(-horizon)
     df["y_prev"] = df["revenda"]
     future_date = df["data"].shift(-horizon)
-    gap_mask = (future_date >= GAP_START) & (future_date <= GAP_END)
-    df = df.loc[~gap_mask].copy()
-    feat_cols = [c for c in FEATURE_COLS if c in df.columns and float(df[c].notna().mean()) > 0.8]
-    df[feat_cols] = df[feat_cols].ffill()
-    keep = feat_cols + ["y", "y_prev", "revenda", "data"]
+    # Require every intervening observation to be exactly one calendar week.
+    blocks = df["data"].diff().ne(pd.Timedelta(weeks=1)).cumsum()
+    valid = blocks.eq(blocks.shift(-horizon)) & future_date.eq(df["data"] + pd.Timedelta(weeks=horizon))
+    df["target_date"] = future_date
+    df = df.loc[valid].copy()
+    feat_cols = list(FEATURE_COLS)
+    missing = set(feat_cols) - set(df.columns)
+    if missing:
+        raise ValueError(f"Missing fixed features: {sorted(missing)}")
+    # Lagged values are not forward/backward-filled: missing observations must
+    # not silently become stale values with incorrect week labels.
+    keep = feat_cols + ["y", "y_prev", "revenda", "data", "target_date"]
     out = df[keep].dropna(subset=feat_cols + ["y"]).reset_index(drop=True)
     out.attrs["feat_cols"] = feat_cols
     return out
@@ -69,10 +82,8 @@ def latest_features(feat_cols: list) -> Tuple[np.ndarray, pd.Timestamp, float]:
     de producao precisa.
     """
     full = load_features()
-    full[feat_cols] = full[feat_cols].ffill().bfill()
-    full = full.dropna(subset=feat_cols).sort_values("data")
-    if full.empty:
-        raise ValueError("Nenhuma linha com features completas em semanal_s10_features.csv")
+    if full.empty or full.iloc[-1][feat_cols + ["revenda"]].isna().any():
+        raise ValueError("Ultima semana sem features completas; nao publicar uma origem antiga")
     x_last = full[feat_cols].to_numpy(float)[-1]
     ultima_data = pd.Timestamp(full["data"].iloc[-1])
     ultimo_preco = float(full["revenda"].iloc[-1])
