@@ -16,7 +16,6 @@ from .db import database
 from .dependencies import admin
 from .limits import RateLimiter
 from .middleware import Guardrails
-from .product import Artifacts
 
 
 def create_app(settings=None, *, session_factory=None, redis_client=None):
@@ -55,7 +54,6 @@ def create_app(settings=None, *, session_factory=None, redis_client=None):
     app.state.settings = settings
     app.state.sessions = session_factory
     app.state.limiter = limiter
-    app.state.artifacts = Artifacts(settings)
     app.include_router(auth.router)
     app.include_router(management.router)
     app.include_router(product.router)
@@ -84,7 +82,11 @@ def create_app(settings=None, *, session_factory=None, redis_client=None):
     def ready():
         try:
             with session_factory() as db:
-                db.execute(text("SELECT 1 FROM alembic_version LIMIT 1"))
+                revision = db.scalar(text("SELECT version_num FROM alembic_version LIMIT 1"))
+                if revision != "0002_model_publication":
+                    return JSONResponse({"status": "migration_required"}, status_code=503)
+                if db.scalar(text("SELECT id FROM model_publication WHERE id = 1")) != 1:
+                    return JSONResponse({"status": "migration_required"}, status_code=503)
             redis_client.ping()
         except (SQLAlchemyError, RedisError):
             return JSONResponse({"status": "unavailable"}, status_code=503)

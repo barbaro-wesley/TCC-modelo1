@@ -1,4 +1,5 @@
 from concurrent.futures import ThreadPoolExecutor
+from datetime import timedelta
 
 import pytest
 from alembic import command
@@ -163,16 +164,21 @@ def test_quota_is_atomic_and_survives_redis_loss(backend, monkeypatch):
         assert sorted(db.scalars(select(MonthlyUsage.units)).all()) == [1, 3]
 
 
-def test_failed_forecast_not_metered_and_history_bounded(backend):
-    client, admin, _, settings, _ = backend
+def test_failed_forecast_not_metered_and_history_bounded(backend, monkeypatch):
+    from api.app import product
+    from api.app.models import now
+
+    client, admin, *_ = backend
     _, headers, _, _ = onboard(client, admin)
     history = client.get("/api/v1/history?page=2&page_size=5", headers=headers)
     assert history.status_code == 200 and len(history.json()["items"]) == 5
     assert history.json()["total"] == 30
     assert client.get("/api/v1/status", headers=headers).json().get("erro") is None
-    (settings.data_dir / "previsao.json").write_text("{}", encoding="utf-8")
+    expired = now() + timedelta(days=14)
+    monkeypatch.setattr(product, "now", lambda: expired)
     assert client.get("/api/v1/forecast", headers=headers).status_code == 503
     assert client.get("/api/v1/usage", headers=headers).json()["units"] == 1
+    assert client.get("/api/v1/history", headers=headers).status_code == 200
 
 
 def test_api_keys_revocation_subscription_and_plan_snapshot(backend):
