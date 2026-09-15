@@ -30,7 +30,7 @@ if [ -z "$PY" ]; then
   exit 1
 fi
 
-export PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}"
+export PYTHONPATH="$ROOT:$ROOT/src${PYTHONPATH:+:$PYTHONPATH}"
 export MPLBACKEND=Agg
 export OMP_NUM_THREADS="${OMP_NUM_THREADS:-2}"
 export TZ="${TZ:-America/Sao_Paulo}"

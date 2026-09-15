@@ -1,7 +1,7 @@
 # Backend Diesel S10
 
 Python 3.13+, FastAPI, SQLAlchemy 2, PostgreSQL/Neon, Alembic e Redis. A API lê
-`results/api/` produzido pelo pipeline; não retreina modelos ao atender requisições.
+publicações completas no PostgreSQL; não retreina modelos ao atender requisições.
 O backend não depende dos pacotes de Machine Learning em `requirements.txt` da raiz.
 
 ## Execução local (PowerShell, na raiz do repositório)
@@ -192,6 +192,14 @@ Use `chmod 600 .env`, propriedade do usuário do serviço. O processo escuta som
 127.0.0.1:8080; nginx termina HTTPS. Nenhum deploy remoto é executado automaticamente.
 
 Alternativa: `docker build -f api/Dockerfile -t s10-api .`; forneça ambiente na
-execução e monte `results/api` read-only em `/app/results/api`. O container roda sem
+execução. Não precisa montar arquivos de resultados. O container roda sem
 root. Migração é um comando separado. O rate limit total é compartilhado; o pool
 do banco é por worker, então 2 workers com pool 5 usam até 10 conexões.
+
+O job usa outro ambiente, credencial e imagem em `training/`. A API tem somente
+SELECT nas tabelas `model_*`, além das permissões comerciais existentes.
+Migre para `0002_model_publication` antes de iniciar esta versão. Forecast/history
+respondem 503 até a primeira publicação; JSONs antigos não são importados.
+Os endpoints preservam seus campos e acrescentam `run_id` à previsão e às linhas
+de histórico de previsões. Filtros e paginação do histórico são feitos no SQL.
+Procedimento de atualização, permissões e execução do job: [deploy/README.md](../deploy/README.md).

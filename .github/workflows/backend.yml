@@ -1,9 +1,9 @@
 name: Backend Python
 on:
   push:
-    paths: ["api/**", "deploy/**", "compose.yaml", ".github/workflows/backend.yml"]
+    paths: ["api/**", "forecast_store/**", "training/**", "src/**", "scripts/**", "tests/**", "deploy/**", "compose.yaml", ".github/workflows/backend.yml"]
   pull_request:
-    paths: ["api/**", "deploy/**", "compose.yaml", ".github/workflows/backend.yml"]
+    paths: ["api/**", "forecast_store/**", "training/**", "src/**", "scripts/**", "tests/**", "deploy/**", "compose.yaml", ".github/workflows/backend.yml"]
 jobs:
   backend:
     runs-on: ubuntu-latest
@@ -35,6 +35,17 @@ jobs:
           cache: pip
           cache-dependency-path: api/requirements*.txt
       - run: pip install -r api/requirements-dev.txt
-      - run: ruff check api && ruff format --check api
+      - run: ruff check --config api/ruff.toml api forecast_store training && ruff format --check --config api/ruff.toml api forecast_store training
       - run: pytest -c api/pytest.ini api/tests -q
       - run: bash -n deploy/instalar_api.sh
+      - run: bash -n deploy/instalar_vps.sh deploy/run_semanal.sh
+  scientific:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      # Synthetic tests instrument ML estimators; torch/GBM training is not run.
+      - run: pip install numpy==2.5.0 pandas==3.0.5 scipy==1.16.3 scikit-learn==1.9.0 statsmodels==0.14.6 matplotlib==3.11.1 requests==2.32.5 filelock==3.18.0 pytest==9.1.1
+      - run: PYTHONPATH=.:src pytest tests -q

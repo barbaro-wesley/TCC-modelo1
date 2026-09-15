@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import sys
-import tempfile
 from pathlib import Path
 
 import pandas as pd
@@ -76,37 +75,3 @@ def test_vencedor_ignora_modelo_sem_previsao_de_producao(monkeypatch):
     assert nome == "ARIMA"
     assert rmse == 0.07
     assert len(descartados) == 2  # LSTM (sem producao) e VS-ePL-KRLS (nao finita)
-
-
-def test_historico_preenche_realizado_da_semana_passada(monkeypatch):
-    tmp = tempfile.TemporaryDirectory()
-    monkeypatch.setattr(weekly, "HISTORICO", Path(tmp.name) / "historico.json")
-    semanal = pd.DataFrame(
-        {
-            "data": pd.to_datetime(["2026-08-09", "2026-08-16"]),
-            "revenda": [6.91, 6.89],
-        }
-    )
-    antiga = {
-        "modelo": "ARIMA",
-        "criterio_selecao": "menor RMSE walk-forward em h=1",
-        "ultima_semana_observada": "2026-08-09",
-        "preco_observado_ultima_semana": 6.91,
-        "semana_prevista": "2026-08-16",
-        "previsao_pontual": 6.90,
-        "p10": 6.85,
-        "p90": 6.95,
-    }
-    weekly.atualizar_historico(antiga, semanal)
-
-    nova = dict(antiga, ultima_semana_observada="2026-08-16", semana_prevista="2026-08-23",
-                preco_observado_ultima_semana=6.89, previsao_pontual=6.88)
-    registros = weekly.atualizar_historico(nova, semanal)
-
-    por_semana = {r["semana_prevista"]: r for r in registros}
-    fechada = por_semana["2026-08-16"]
-    assert fechada["preco_realizado"] == 6.89
-    assert abs(fechada["erro"] - (6.89 - 6.90)) < 1e-9
-    # a semana ainda nao publicada fica sem realizado
-    assert por_semana["2026-08-23"]["preco_realizado"] is None
-    tmp.cleanup()

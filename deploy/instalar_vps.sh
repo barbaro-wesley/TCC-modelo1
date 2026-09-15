@@ -73,7 +73,8 @@ else
 fi
 
 chmod +x "$ROOT/deploy/run_semanal.sh" "$ROOT/deploy/instalar_vps.sh"
-mkdir -p "$ROOT/logs" "$ROOT/results/api" "$ROOT/data/raw" "$ROOT/data/processed"
+"$PY" -m pip install -r training/requirements-db.txt
+mkdir -p "$ROOT/logs" "$ROOT/results" "$ROOT/data/raw" "$ROOT/data/processed"
 
 if [ "$PRIMEIRA_EXECUCAO" -eq 1 ]; then
   echo "==> primeira execucao (baixa tudo e treina; pode levar alguns minutos)"
@@ -84,7 +85,7 @@ if [ "$PRIMEIRA_EXECUCAO" -eq 1 ]; then
     echo "primeira execucao falhou; veja logs/semanal-$(date +%Y-%m-%d).log" >&2
     exit 1
   }
-  echo "==> ok. Previsao em results/api/previsao.json"
+  echo "==> ok. Previsao publicada no PostgreSQL."
 fi
 
 if [ "$INSTALAR_CRON" -eq 1 ]; then
@@ -109,5 +110,5 @@ fi
 echo
 echo "Pronto."
 echo "  logs:      $ROOT/logs/"
-echo "  API le de: $ROOT/results/api/{previsao,historico,status}.json"
+echo "  API le:    publicacao vigente no PostgreSQL"
 echo "  manual:    $ROOT/deploy/run_semanal.sh --forcar"

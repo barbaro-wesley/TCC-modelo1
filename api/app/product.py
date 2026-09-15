@@ -1,4 +1,3 @@
-import json
 import math
 from datetime import date
 from typing import Literal
@@ -7,6 +6,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
+
+from forecast_store.repository import current_forecast, history_page, pipeline_status
 
 from .db import get_db
 from .dependencies import Identity, subscription, tenant
@@ -18,26 +19,14 @@ from .schemas import CostScenario
 router = APIRouter(prefix="/api/v1", tags=["forecast"])
 
 
-class Artifacts:
-    def __init__(self, settings):
-        self.settings = settings
-
-    def read(self, name):
-        try:
-            # Nomes fornecidos exclusivamente pelo servidor, nunca pelo cliente.
-            with (self.settings.data_dir / name).open("rb") as stream:
-                raw = stream.read(self.settings.max_artifact_bytes + 1)
-            if len(raw) > self.settings.max_artifact_bytes:
-                raise ValueError("artifact too large")
-            payload = json.loads(raw, parse_constant=lambda value: None)
-            if not isinstance(payload, dict):
-                raise ValueError("invalid artifact")
-            return payload
-        except (OSError, ValueError) as exc:
-            raise HTTPException(503, detail={"code": "artifact_unavailable"}) from exc
+class ForecastReader:
+    def __init__(self, settings, db):
+        self.settings, self.db = settings, db
 
     def forecast(self):
-        result = self.read("previsao.json")
+        result = current_forecast(self.db)
+        if result is None:
+            raise HTTPException(503, detail={"code": "forecast_unavailable_or_stale"})
         try:
             origin = date.fromisoformat(result["ultima_semana_observada"])
             target = date.fromisoformat(result["semana_prevista"])
@@ -103,7 +92,7 @@ def forecast(
     db: Session = Depends(get_db),
 ):
     subscription(db, auth.organization_id)
-    data = request.app.state.artifacts.forecast()
+    data = ForecastReader(request.app.state.settings, db).forecast()
     consume(db, auth, request, response)
     return data
 
@@ -122,20 +111,11 @@ def history(
     subscription(db, auth.organization_id)
     if start and end and start > end:
         raise HTTPException(422, detail={"code": "invalid_date_range"})
-    artifact = request.app.state.artifacts.read("historico.json")
-    records = artifact.get("serie" if series == "observed" else "previsoes", [])
-    field = "data" if series == "observed" else "semana_prevista"
-    try:
-        records = sorted(records, key=lambda row: date.fromisoformat(row[field]), reverse=True)
-        records = [
-            row
-            for row in records
-            if (not start or row[field] >= start.isoformat())
-            and (not end or row[field] <= end.isoformat())
-        ]
-    except (KeyError, TypeError, ValueError) as exc:
-        raise HTTPException(503, detail={"code": "invalid_history_artifact"}) from exc
-    result = envelope(records[page.offset : page.offset + page.size], len(records), page)
+    result_page = history_page(db, series, start, end, page.offset, page.size)
+    if result_page is None:
+        raise HTTPException(503, detail={"code": "history_unavailable"})
+    records, total = result_page
+    result = envelope(records, total, page)
     consume(db, auth, request, response)
     return result
 
@@ -151,7 +131,7 @@ def cost(
     if auth.role == "viewer":
         raise HTTPException(403, detail={"code": "read_only_role"})
     subscription(db, auth.organization_id)
-    data = request.app.state.artifacts.forecast()
+    data = ForecastReader(request.app.state.settings, db).forecast()
     volume = payload.volume_liters
     result = {
         "volume_liters": volume,
@@ -167,10 +147,5 @@ def cost(
 
 
 @router.get("/status")
-def product_status(request: Request, auth: Identity = Depends(tenant)):
-    result = request.app.state.artifacts.read("status.json")
-    # Nao expor caminhos, mensagens internas ou credenciais contidas em erros do pipeline.
-    return {
-        key: result.get(key)
-        for key in ("status", "ultima_semana_processada", "ultima_execucao_ok", "modelo_producao")
-    }
+def product_status(auth: Identity = Depends(tenant), db: Session = Depends(get_db)):
+    return pipeline_status(db)

@@ -5,6 +5,8 @@ from typing import Callable, Dict, List, Optional
 import numpy as np
 import pandas as pd
 
+from eval.temporal import training_ends
+
 
 def expanding_origin_indices(n: int, n_min_train: int, horizon: int) -> List[int]:
     """Origins t such that we predict y[t+horizon] using data up to t."""
@@ -18,39 +20,29 @@ def walk_forward_online(
     y: np.ndarray,
     n_min_train: int,
     horizon: int = 1,
+    origin_dates=None,
+    target_dates=None,
 ) -> Dict[str, np.ndarray]:
-    """Predict y[t+h] from X[t] after training on pairs up to origin t.
+    """Predict shifted y[t] using only labels mature at the current origin.
 
-    For an online model the factory is called once; we stream update(X[k], y[k])
-    using the contemporaneous pair (features at k, target at k which is already
-    lagged/shifted so that y[k] is the h-step target known only after h weeks).
-
-    Leak-safe protocol:
-      at origin t we may use X[0..t] and y[0..t-1] (y[t] is the h-step target
-      that realizes at t+h, so it is NOT known at t). We predict yhat[t] from
-      X[t], then when the next origin arrives we update with the newly realized
-      target.
+    Supply dates for irregular/filtered panels. Without dates, rows must be
+    equally spaced and label k becomes observable at k+horizon.
     """
     model = model_factory()
     n = len(y)
     yhat = np.full(n, np.nan)
     n_rules = np.full(n, np.nan)
     betas = np.full(n, np.nan)
+    ends = training_ends(n, horizon, origin_dates, target_dates)
+    learned = 0
     for t in range(n):
-        if t == 0:
+        while learned < ends[t]:
+            model.update(X[learned], float(y[learned]))
+            learned += 1
+        if t >= n_min_train:
             yhat[t] = model.predict_one(X[t]) if model.n_rules else np.nan
-            continue
-        # y[t-1] has just become available in a delayed sense only when t-1+h
-        # has passed. In the supervised matrix, row t already uses lagged
-        # features, and y[t] is revenda[t+h]. To avoid using future y we update
-        # with the previous realized pair after predicting.
-        yhat[t] = model.predict_one(X[t]) if model.n_rules else np.nan
-        if t >= 1:
-            model.update(X[t - 1], float(y[t - 1]))
         n_rules[t] = getattr(model, "n_rules", np.nan)
         betas[t] = getattr(model, "beta", np.nan)
-    if n >= 1:
-        model.update(X[n - 1], float(y[n - 1]))
     mask = ~np.isnan(yhat)
     mask[: max(n_min_train, 1)] = False
     return {
@@ -69,18 +61,25 @@ def walk_forward_batch(
     n_min_train: int,
     refit_every: int = 4,
     extra: Optional[dict] = None,
+    horizon: int = 1,
+    origin_dates=None,
+    target_dates=None,
 ) -> Dict[str, np.ndarray]:
     n = len(y)
     yhat = np.full(n, np.nan)
     last_model = None
     last_fit_end = -10**9
     extra = extra or {}
+    ends = training_ends(n, horizon, origin_dates, target_dates)
     for t in range(n_min_train, n):
+        te = ends[t]
+        if te == 0:
+            continue
         if t - last_fit_end >= refit_every or last_model is None:
-            last_model = fit_predict(X[:t], y[:t], X[t : t + 1], **extra)
+            last_model = fit_predict(X[:te], y[:te], X[t : t + 1], **extra)
             last_fit_end = t
             yhat[t] = last_model[0]
         else:
-            yhat[t] = fit_predict(X[:t], y[:t], X[t : t + 1], model=last_model[1], **extra)[0]
+            yhat[t] = fit_predict(X[:te], y[:te], X[t : t + 1], model=last_model[1], **extra)[0]
     mask = ~np.isnan(yhat)
     return {"yhat": yhat, "mask": mask}
