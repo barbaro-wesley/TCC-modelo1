@@ -1,10 +1,12 @@
 from alembic import context
-from api.app.config import Settings
-from api.app.models import Base
 from sqlalchemy import create_engine, pool
 
+from api.app.config import Settings
+from api.app.models import Base
+from forecast_store.schema import metadata as model_metadata
+
 settings = context.config.attributes.get("settings") or Settings()
-target_metadata = Base.metadata
+target_metadata = [Base.metadata, model_metadata]
 
 if context.is_offline_mode():
     context.configure(

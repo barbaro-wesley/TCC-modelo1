@@ -1,150 +1,149 @@
-# Atualização semanal na VPS
+# Treinamento e API independentes
 
-O job baixa os dados novos da ANP, refaz as features, roda o walk-forward de novo e
-publica a previsão do modelo vencedor em JSON. Tudo fica em arquivo no disco — a API
-em Python lê `results/api/` e mantém usuários, assinaturas e consumo no PostgreSQL.
+O job coleta dados, avalia os candidatos e publica o resultado no PostgreSQL.
+A API consulta o banco e usa Redis para rate limit. Os processos podem rodar em
+hosts diferentes: não precisam compartilhar disco, ambiente Python ou credenciais.
 
-## Instalação
+## Atualizar uma instalação existente
 
-```bash
-sudo apt install python3 python3-venv build-essential libgomp1
-git clone <repo> /srv/diesel-s10
-cd /srv/diesel-s10
-./deploy/instalar_vps.sh --sem-torch --cron
-```
+1. Faça backup do banco e preserve os antigos arquivos de resultados.
+2. No ambiente administrativo da API, configure a conexão de migração
+   `S10_MIGRATION_DATABASE_URL` e execute
+   `python -m alembic -c api/alembic.ini upgrade head`.
+   A revisão `0002_model_publication` acrescenta cinco tabelas, sem alterar os dados comerciais.
+3. Configure o publicador com `.env.training` e instale `training/requirements.txt`.
+4. Execute `python scripts/05_atualizacao_semanal.py --forcar --pular-lstm`.
+   Confira o status e a origem publicada no banco.
+5. Atualize a API e verifique `/health/ready`, login e `/api/v1/forecast`.
 
-`libgomp1` é o OpenMP que LightGBM e XGBoost exigem — sem ele o import falha em
-imagem enxuta de VPS. Confira também a versão do Python: `requirements.txt` está
-pinado em `numpy==2.5.0` / `pandas==3.0.5`, que pedem Python recente (3.12+). Se o
-`python3` da VPS for mais antigo e o `pip install` reclamar de wheel, instale um
-Python novo (`deadsnakes` no Ubuntu) e aponte com
-`PYTHON_BASE=/usr/bin/python3.13 ./deploy/instalar_vps.sh ...`.
+Os JSONs antigos não são importados automaticamente: podem conter resultados do
+protocolo anterior à correção temporal. Nenhum arquivo legado é apagado.
+O histórico de previsões no banco começa na primeira publicação desta versão;
+a série observada completa é gravada a cada publicação. Antes da primeira,
+forecast/history respondem 503, sem consumo de cota. API antiga pode continuar
+servindo seus arquivos durante o preparo, mas eles não serão mais atualizados.
 
-`--sem-torch` pula ~800 MB de dependência: o LSTM é só benchmark e perde por ordens de
-grandeza no walk-forward. Sem torch, o job precisa rodar sempre com `--pular-lstm`
-(o `--cron` já monta as linhas assim). Se quiser o benchmark completo para o TCC,
-instale sem a flag e rode `deploy/run_semanal.sh --forcar` de vez em quando.
+## Treinamento
 
-O script é idempotente: rodar de novo não recria a venv nem duplica linha de cron.
-
-## Agendamento
-
-Padrão instalado pelo `--cron` (veja `crontab.example`):
-
-```
-CRON_TZ=America/Sao_Paulo
-30 9  * * * /srv/diesel-s10/deploy/run_semanal.sh --pular-lstm
-30 15 * * * /srv/diesel-s10/deploy/run_semanal.sh --pular-lstm
-```
-
-**Por que duas vezes por dia e não uma vez por semana:** a ANP publica a síntese semanal
-no meio da semana, mas a data varia e às vezes atrasa. Quando não há semana nova, o job
-compara a última data da planilha com `results/pipeline_state.json` e sai em segundos,
-sem treinar nada. Então rodar todo dia custa quase nada e você nunca perde a publicação.
-
-Quem preferir systemd em vez de cron:
+Na raiz do checkout:
 
 ```bash
-sudo cp deploy/diesel-semanal.{service,timer} /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now diesel-semanal.timer
-systemctl list-timers diesel-semanal
+python3.13 -m venv .venv
+.venv/bin/python -m pip install -r training/requirements.txt
+cp .env.training.example .env.training
+# Edite a URL do publicador e S10_CODE_VERSION com o SHA implantado.
+chmod 600 .env.training
+.venv/bin/python scripts/05_atualizacao_semanal.py --pular-lstm
 ```
 
-O timer tem `Persistent=true`: se a VPS estiver desligada no horário, ele dispara ao voltar.
+Use uma URL PostgreSQL exclusiva em `S10_TRAINING_DATABASE_URL`.
+Em produção, defina `S10_ENVIRONMENT=production` e TLS (`sslmode=require`
+ou verificação de certificado). Variáveis do processo prevalecem sobre o arquivo.
+O treinamento não carrega `.env`, JWT, Redis nem os pacotes da API.
 
-## O que uma execução faz
+Na VPS, `deploy/instalar_vps.sh --sem-torch --cron` instala o ambiente e agenda
+09:30 e 15:30 (America/Sao_Paulo). Configure o banco/migração antes de executá-lo.
+Use `--sem-primeira-execucao` para instalar sem iniciar o job.
+LightGBM/XGBoost precisam de OpenMP (`libgomp1` no Debian/Ubuntu).
+LSTM é opcional com `--pular-lstm`; as demais avaliações continuam.
 
-1. Baixa ANP (mensal + semanal), Brent e câmbio do IPEADATA, ULSD do Stooq.
-   Cada arquivo vai para `.part`, é validado e só então substitui o anterior — uma
-   página de erro ou de captcha nunca sobrescreve dado bom. A versão anterior fica em `.prev`.
-2. Lê a planilha semanal e compara a última semana com o estado salvo. Igual → sai (exit 0).
-3. Checagens de sanidade: planilha não pode encolher, data não pode estar no futuro,
-   preço não pode dar salto implausível. Reprovou → aborta **sem** tocar no processado (exit 2).
-4. Reconstrói `data/processed/`.
-5. Roda o walk-forward completo (`scripts/03_semanal.py`, h = 1, 2, 4).
-6. Reajusta cada candidato na série inteira, escolhe o de menor RMSE em h=1 e publica
-   a previsão dele com P10/P90 conformais.
-7. Atualiza histórico, `results/api/`, os relatórios e a seção "Previsão atual" do README.
+Container independente:
 
-Uma execução com retreino leva alguns minutos; sem semana nova, segundos.
+```bash
+docker build -f training/Dockerfile -t s10-training .
+docker run --rm --env-file .env.training s10-training
+```
 
-## Códigos de saída
+O container usa seu próprio disco de trabalho. Sem persistência, baixa e reconstrói
+os dados novamente; a previsão publicada continua no banco. Para cron na VPS,
+`deploy/run_semanal.sh` grava logs locais. Systemd é alternativa ao cron:
+`deploy/diesel-semanal.service` e `deploy/diesel-semanal.timer`.
 
-| Código | Significado |
+## API
+
+Siga [api/README.md](../api/README.md) para criar o administrador e configurar a API.
+Seu ambiente instala somente `api/requirements.txt`. A imagem inclui `forecast_store`,
+sem pandas, modelos ou bibliotecas de treino.
+
+```bash
+docker build -f api/Dockerfile -t s10-api .
+docker run --rm --env-file .env -p 127.0.0.1:8080:8080 s10-api
+```
+
+As URLs devem ser alcançáveis de cada container; `localhost` dentro dele é o
+próprio container. Para desenvolvimento fora de containers, `compose.yaml`
+disponibiliza PostgreSQL/Redis no host. Não monte `results/api` na API.
+
+## Permissões do banco
+
+Use três credenciais: proprietário/migrador (DDL), API e publicador.
+Crie os usuários pelo provedor ou DBA, sem colocar senhas no repositório.
+Depois da migração, ajuste os nomes abaixo aos usuários criados:
+
+```sql
+GRANT USAGE ON SCHEMA public TO s10_api, s10_training;
+GRANT SELECT ON alembic_version TO s10_api;
+GRANT SELECT ON model_runs, model_forecasts, model_observations,
+    model_metrics, model_publication TO s10_api;
+GRANT SELECT, INSERT, UPDATE ON model_runs TO s10_training;
+GRANT SELECT, INSERT ON model_forecasts, model_observations,
+    model_metrics TO s10_training;
+GRANT SELECT, UPDATE ON model_publication TO s10_training;
+GRANT USAGE, SELECT ON SEQUENCE model_runs_id_seq TO s10_training;
+```
+
+A API também precisa das permissões de leitura/gravação já usadas nas tabelas
+comerciais da revisão 0001. Não dê ao publicador acesso a usuários, senhas,
+assinaturas ou consumo. Não conceda escrita nas tabelas `model_*` à API.
+Evite usuários com privilégios herdados de proprietário/superusuário. Os GRANTs
+acima não revogam privilégios previamente concedidos. A migração não cria usuários
+nem concede permissões automaticamente.
+
+## Contrato e consistência
+
+| Tabela | Conteúdo |
 | --- | --- |
-| 0 | ok — inclui "sem semana nova" |
-| 1 | erro (rede, parsing, treino) |
-| 2 | dados novos reprovados na sanidade; o processado anterior foi mantido |
-| 3 | outra execução em andamento (trava em `results/.pipeline.lock`) |
+| `model_runs` | início/fim, estado, versão do código, protocolo, configuração e fontes |
+| `model_forecasts` | origem, alvo h=1, modelo, preço, intervalo e metadados JSONB |
+| `model_observations` | snapshot da série semanal usada por execução |
+| `model_metrics` | métricas por execução, modelo e horizonte |
+| `model_publication` | ponteiro único para a última publicação completa |
 
-Alerta opcional em falha: exporte `ALERTA_WEBHOOK=https://...` e o wrapper faz um POST
-com as últimas linhas do log.
+O job registra `running` antes do download. Não mantém conexão durante o treino.
+Previsão, observações, métricas, estado final e ponteiro são escritos numa única
+transação curta. Uma falha desfaz a publicação; o job tenta registrar `failed`
+com a classe do erro, sem expor mensagens internas pela API.
 
-## Logs e diagnóstico
+O lock do arquivo protege o diretório local, inclusive treinos com mais de seis horas.
+É liberado pelo sistema quando o processo morre; não apague o arquivo de lock durante
+uma execução. Em hosts diferentes, a linha de publicação serializa a confirmação:
+uma execução antiga que termina após outra mais nova não substitui a vigente.
+Datas de origem não podem retroceder. Repetir uma publicação já confirmada não duplica dados.
 
-```bash
-tail -f logs/semanal-$(date +%F).log     # execução do dia
-cat results/api/status.json              # saúde do pipeline
-cat results/pipeline_state.json          # última semana processada
-cat data/raw/download_report.json        # o que cada fonte devolveu
-```
+Uma nova execução da mesma semana fica preservada para auditoria; `history?series=forecasts`
+expõe a última previsão publicada por semana-alvo. O realizado e o erro são calculados
+com a série observada da publicação vigente, sem alterar a previsão original.
+Datas, filtros, contagem e paginação são processados no SQL.
+P10/P90 podem ser nulos enquanto faltam resíduos de calibração.
 
-Logs com mais de 60 dias são apagados sozinhos. Se um job morreu no meio e deixou a trava,
-ela é ignorada automaticamente depois de 6 horas — ou apague `results/.pipeline.lock`.
+Sem semana nova e com o mesmo protocolo, o job registra `no_change` e não treina.
+Correções de preços na mesma semana exigem `--forcar`.
+`--somente-dados` reconstrói arquivos científicos e registra `data_only`, sem
+alterar a publicação. Um processo morto abruptamente pode ficar como `running`
+no histórico; acompanhe o agendador e logs para detectar execuções abandonadas.
 
-## Contrato interno de artefatos para a API Python
+## Operação
 
-`results/api/` é reescrito por completo a cada execução (escrita atômica via `.tmp` +
-rename, então a API nunca lê um arquivo pela metade).
+- `GET /api/v1/status`: última tentativa e dados da publicação vigente, autenticado.
+- `GET /health/ready`: revisão de banco e Redis disponíveis.
+- Previsão vencida: forecast/scenarios respondem 503 sem gastar cota; histórico permanece.
+- `logs/semanal-*.log`: diagnóstico do treinamento, retenção local de 60 dias.
+- Códigos do job: 0 sucesso/sem novidade, 1 falha, 2 sanidade reprovada, 3 diretório ocupado.
 
-### `previsao.json`
+CSVs, figuras, relatórios de download e diagnósticos continuam sendo arquivos de
+pesquisa internos. `scripts/03_semanal.py` sozinho não publica; seu JSON VS-ePL chama-se
+`diagnostico_vsepl_h1.json`. O job 05 é o publicador. O relatório opcional
+`scripts/04_producao.py` lê a publicação do banco. Pesos/checkpoints não são gravados
+no PostgreSQL nesta alteração; a API serve previsões pré-calculadas.
 
-```json
-{
-  "modelo": "ARIMA",
-  "criterio_selecao": "menor RMSE walk-forward em h=1",
-  "rmse_walkforward": 0.0725,
-  "ultima_semana_observada": "2026-08-16",
-  "preco_observado_ultima_semana": 6.89,
-  "semana_prevista": "2026-08-23",
-  "horizonte": "1 semana",
-  "previsao_pontual": 6.882,
-  "p10": 6.83,
-  "p90": 6.94,
-  "probabilidades": { "p_alta": 0.09, "p_estavel": 0.61, "p_queda": 0.30 },
-  "previsoes_por_modelo": { "naive": 6.89, "ARIMA": 6.882, "LightGBM": 6.859 },
-  "ranking_h1": [ { "model": "ARIMA", "rmse": 0.0725, "mae": 0.0278 } ]
-}
-```
-
-`p10`, `p90` e as probabilidades são `null` enquanto não houver pelo menos 20 resíduos
-walk-forward do modelo vencedor. Valores numéricos podem vir `null`; a API valida os campos necessários antes de servir a previsão.
-
-### `historico.json`
-
-`serie` traz a série semanal completa da ANP (`data`, `revenda`); `previsoes` traz uma
-entrada por semana prevista, com `preco_realizado` e `erro` preenchidos assim que a ANP
-publica aquela semana. É o suficiente para o front mostrar o gráfico e a acurácia real
-acumulada.
-
-### `status.json`
-
-`status` é `atualizado`, `sem_novidade`, `dados_atualizados` ou `erro`. Use
-`ultima_execucao_ok` e `ultima_semana_processada` para um health check: se
-`ultima_semana_processada` ficar mais de ~10 dias atrás do dia de hoje, algo travou.
-
-## API Python autenticada
-
-O backend da plataforma foi consolidado em Python/FastAPI. Instalação local, Neon,
-Redis, migrações, autenticação, planos, consumo, paginação e testes estão em
-[`api/README.md`](../api/README.md).
-
-Na VPS, configure `.env` antes de executar `sudo ./deploy/instalar_api.sh <dominio>`.
-O instalador cria `.venv-api`, instala as dependências do backend, aplica Alembic e
-configura systemd/nginx/TLS. Não há mais compilação Go. As URLs públicas agora são
-`/api/v1/forecast`, `/api/v1/history` e `/api/v1/status`, todas autenticadas.
-`/health/live` verifica o processo; `/health/ready` verifica PostgreSQL e Redis.
-
-O job de treinamento continua com seu ambiente `.venv` e agendamento independentes.
-Não publique `results/api` diretamente no nginx: isso permitiria contornar a autenticação.
+Não há implantação remota, migração em produção nem agendamento novo automático pelo CI.

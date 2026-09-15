@@ -1,4 +1,3 @@
-from pathlib import Path
 from typing import Literal
 
 from pydantic import Field, SecretStr, model_validator
@@ -20,9 +19,7 @@ class Settings(BaseSettings):
     refresh_days: int = Field(default=7, ge=1, le=30)
     cors_origins: list[str] = []
     allowed_hosts: list[str] = ["localhost", "127.0.0.1", "testserver"]
-    data_dir: Path = Path("results/api")
     forecast_max_age_days: int = Field(default=10, ge=1, le=30)
-    max_artifact_bytes: int = Field(default=10_000_000, ge=1024, le=50_000_000)
     page_size: int = Field(default=20, ge=1, le=100)
     max_page_size: int = Field(default=100, ge=1, le=1000)
     max_offset: int = Field(default=10_000, ge=0, le=100_000)

@@ -348,7 +348,7 @@ def main():
                 "n_regras": vs_model.n_rules,
                 "aviso": "Previsao do preco medio nacional de REVENDA. Nao e preco de bomba de um posto especifico.",
             }
-            (RES / "previsao_proxima_semana.json").write_text(
+            (RES / "diagnostico_vsepl_h1.json").write_text(
                 json.dumps(prod_payload, indent=2, ensure_ascii=False), encoding="utf-8"
             )
 

@@ -1,4 +1,3 @@
-import json
 import os
 from datetime import timedelta
 from uuid import uuid4
@@ -16,6 +15,7 @@ from api.app.db import database
 from api.app.main import create_app
 from api.app.models import User, now
 from api.app.security import passwords
+from forecast_store.repository import Publisher
 
 PASSWORD = "Test-password-2026!"
 
@@ -64,7 +64,6 @@ def backend(tmp_path):
     url = base_url.update_query_dict({"options": f"-csearch_path={schema}"})
     config = settings(
         database_url=url.render_as_string(hide_password=False),
-        data_dir=tmp_path,
         redis_prefix=schema,
         pool_size=12,
     )
@@ -91,26 +90,17 @@ def backend(tmp_path):
             "p10": 6.7,
             "p90": 7.1,
             "modelo": "test",
+            "temporal_protocol": "calendar-mature-labels-v1",
         }
-        (tmp_path / "previsao.json").write_text(json.dumps(forecast), encoding="utf-8")
-        (tmp_path / "historico.json").write_text(
-            json.dumps(
-                {
-                    "serie": [
-                        {
-                            "data": (timestamp - timedelta(days=n * 7)).date().isoformat(),
-                            "revenda": 6.8,
-                        }
-                        for n in range(30)
-                    ],
-                    "previsoes": [],
-                }
-            ),
-            encoding="utf-8",
+        publisher = Publisher(engine)
+        run_id = publisher.start(
+            code_version="test", protocol=forecast["temporal_protocol"], config={}
         )
-        (tmp_path / "status.json").write_text(
-            json.dumps({"status": "atualizado", "erro": "private"}), encoding="utf-8"
-        )
+        series = [
+            {"data": (timestamp - timedelta(days=n * 7)).date().isoformat(), "revenda": 6.8}
+            for n in range(30)
+        ]
+        publisher.publish(run_id, forecast, series, [{"model": "test", "horizon": 1, "rmse": 0.07}])
         with factory() as db:
             db.add(
                 User(
